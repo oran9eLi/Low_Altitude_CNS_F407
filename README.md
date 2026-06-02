@@ -157,7 +157,7 @@ GNSS NMEA / BME280 register / power ADC sample
 | 功能 | 建议设备 | 与 F407 的关系 |
 | --- | --- | --- |
 | 导航定位 | ATGM336H 或同类 GNSS 模块 | UART，解析 NMEA |
-| 通信链路演示 | E22-400T30D LoRa 数传模块 | UART，透明传输/链路状态 |
+| 通信链路演示 | LoRa 数传模块 | UART，透明传输/链路状态 |
 | 姿态/环境 | MPU6050、BME280 | I2C |
 | 显示交互 | DWIN 5 寸串口 HMI | UART，页面变量刷新 |
 | 日志存储 | MicroSD 卡 | 优先 SDIO，必要时退回 SPI |
@@ -214,17 +214,3 @@ V1.0 至少保留以下入口：
 ### V3.0：CNS 综合实训平台
 
 扩展为多个主控箱、CNS 设备池、Web/大屏平台和 AI 教官/调度/运维能力，形成完整实验室产品体系。
-
-## 构建验证
-
-验证命令：
-
-```powershell
-& 'C:\Keil_v5\UV4\UV4.exe' -b 'MDK-ARM\low_altitude_cns_f407.uvprojx' -t 'Target 1' -j0 -o 'C:\Users\李岩\Desktop\公司\Project\low_altitude_cns_f407\MDK-ARM\codex_build.log'
-```
-
-最近一次已知验证结果：
-
-```text
-".\Objects\cns_f407.axf" - 0 Error(s), 0 Warning(s).
-```
