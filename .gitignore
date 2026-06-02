@@ -1,0 +1,49 @@
+# dot files
+/.vscode/launch.json
+/.settings
+/.eide/log
+/.eide.usr.ctx.json
+/.eide/.log
+/.eide/.temp
+
+# project out
+/build
+/bin
+/obj
+/out
+/Debug
+/Release
+
+# eide template
+*.ept
+*.eide-template
+
+# Keil MDK local user files
+*.uvguix.*
+*.uvgui.*
+*.uvgui_*
+*.uvoptx.bak
+
+# Keil MDK generated output
+/MDK-ARM/Objects/
+/MDK-ARM/Listings/
+/MDK-ARM/*.log
+*.axf
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.lnp
+*.htm
+*.build_log.htm
+*.dep
+*.d
+*.o
+*.crf
+
+# temporary and backup files
+*.bak
+*.tmp
+*.orig
+~$*

@@ -1,0 +1,29 @@
+* text=auto
+
+*.c text
+*.h text
+*.s text
+*.S text
+*.md text
+*.yml text
+*.yaml text
+*.json text
+*.uvprojx text
+*.uvoptx text
+*.uvguix.* text
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.ico binary
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.zip binary
+*.axf binary
+*.hex binary
+*.bin binary

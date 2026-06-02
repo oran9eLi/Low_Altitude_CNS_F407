@@ -1,0 +1,217 @@
+version: "4.1"
+name: low_altitude_cns_f407
+type: ARM
+deviceName: null
+packDir: null
+srcDirs: []
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders:
+    - name: Core
+      files: []
+      folders:
+        - name: Src
+          files:
+            - path: Core/Src/main.c
+            - path: Core/Src/stm32f4xx_hal_msp.c
+            - path: Core/Src/stm32f4xx_it.c
+            - path: Core/Src/system_stm32f4xx.c
+            - path: Core/Src/stm32f4xx_hal_timebase_tim.c
+          folders: []
+    - name: HAL_Driver
+      files:
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c
+        - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c
+      folders: []
+    - name: CMSIS
+      files:
+        - path: Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/arm/startup_stm32f407xx.s
+      folders: []
+    - name: FreeRTOS
+      files:
+        - path: Middlewares/Source/list.c
+        - path: Middlewares/Source/queue.c
+        - path: Middlewares/Source/tasks.c
+        - path: Middlewares/Source/timers.c
+        - path: Middlewares/Source/portable/MemMang/heap_4.c
+        - path: Middlewares/Source/portable/RVDS/ARM_CM4F/port.c
+      folders: []
+    - name: App
+      files:
+        - path: App/Src/app_tasks.c
+        - path: App/Src/app_registry.c
+        - path: App/Src/app_status.c
+        - path: App/Src/app_alarm.c
+        - path: App/Src/app_logger.c
+        - path: App/Src/app_protocol.c
+        - path: App/Src/app_storage.c
+      folders: []
+    - name: Sensor_Driver
+      files:
+        - path: Sensor_Driver/Src/sensor_registry.c
+      folders: []
+    - name: Bsp
+      files:
+        - path: Bsp/Src/bsp.c
+        - path: Bsp/Src/bsp_uart.c
+        - path: Bsp/Src/bsp_can.c
+        - path: Bsp/Src/bsp_spi.c
+        - path: Bsp/Src/bsp_i2c.c
+        - path: Bsp/Src/bsp_sd.c
+      folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: 65aa883c8c89465a647b9f48470c38cd
+targets:
+  Target 1:
+    cppPreprocessAttrs:
+      defineList:
+        - STM32F407xx
+        - USE_HAL_DRIVER
+      incList:
+        - Core/Inc
+        - App/Inc
+        - Bsp/Inc
+        - Sensor_Driver/Inc
+        - Drivers/CMSIS/Device/ST/STM32F4xx/Include
+        - Drivers/STM32F4xx_HAL_Driver/Inc
+        - Drivers/STM32F4xx_HAL_Driver/Inc/Legacy
+        - Middlewares/Source/include
+        - Middlewares/Source/portable/RVDS/ARM_CM4F
+        - Drivers/CMSIS/Include
+        - .cmsis/include
+        - MDK-ARM/RTE/_Target 1
+      libList: []
+    excludeList: []
+    settings:
+      debugger: cortex-debug
+    toolchain: AC5
+    toolchainConfigMap:
+      AC5:
+        archExtensions: ""
+        cpuType: Cortex-M4
+        floatingPointHardware: single
+        options:
+          version: 4
+          afterBuildTasks: []
+          asm-compiler:
+            defines: []
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            C_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            c99-mode: true
+            one-elf-section-per-function: true
+            optimization: level-0
+            warnings: all-warnings
+          global:
+            output-debug-info: enable
+            use-microLIB: false
+          linker:
+            $disableOutputTask: false
+            $outputTaskExcludes:
+              - .bin
+              - .s19
+            output-format: elf
+            ro-base: "0x08000000"
+            rw-base: "0x20000000"
+            xo-base: ""
+        scatterFilePath: ""
+        storageLayout:
+          RAM:
+            - id: 1
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 3
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 1
+              isChecked: true
+              mem:
+                size: "0x20000"
+                startAddr: "0x20000000"
+              noInit: false
+              tag: IRAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x10000"
+                startAddr: "0x10000000"
+              noInit: false
+              tag: IRAM
+          ROM:
+            - id: 1
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 3
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 1
+              isChecked: true
+              isStartup: true
+              mem:
+                size: "0x100000"
+                startAddr: "0x8000000"
+              tag: IROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: IROM
+        useCustomScatterFile: false
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: "null"
+          vendor: "null"
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+      OpenOCD:
+        baseAddr: "0x08000000"
+        bin: ""
+        interface: stlink
+        target: stm32f4x
+    uploader: OpenOCD
