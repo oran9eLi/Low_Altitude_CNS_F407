@@ -6,6 +6,7 @@
 #include "app_protocol.h"
 #include "app_registry.h"
 #include "app_status.h"
+#include "display.h"
 
 #define APP_TASK_STACK_SYSTEM   (configMINIMAL_STACK_SIZE * 2U)
 #define APP_TASK_STACK_COMM     (configMINIMAL_STACK_SIZE * 2U)
@@ -95,11 +96,24 @@ static void App_CommTask(void *argument)
 
 static void App_DisplayTask(void *argument)
 {
+  Display_Result_t result;
+
   (void)argument;
   App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, 0U);
 
   for (;;) {
-    App_StatusHeartbeat(APP_MODULE_DISPLAY);
+    result = Display_Refresh(xTaskGetTickCount());
+
+    if (result == DISPLAY_OK) {
+      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, 0U);
+      App_StatusHeartbeat(APP_MODULE_DISPLAY);
+    } else if (result == DISPLAY_NOT_READY) {
+      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OFFLINE, (uint32_t)result);
+    } else {
+      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_ERROR, (uint32_t)result);
+      App_AlarmRaise(APP_ALARM_SELF_CHECK_FAILED, APP_MODULE_DISPLAY, (uint32_t)result);
+    }
+
     vTaskDelay(pdMS_TO_TICKS(200));
   }
 }

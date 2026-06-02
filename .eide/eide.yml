@@ -57,6 +57,10 @@ virtualFolder:
       files:
         - path: Sensor_Driver/Src/sensor_registry.c
       folders: []
+    - name: Display
+      files:
+        - path: Display/Src/display.c
+      folders: []
     - name: Bsp
       files:
         - path: Bsp/Src/bsp.c
@@ -80,6 +84,7 @@ targets:
         - Core/Inc
         - App/Inc
         - Bsp/Inc
+        - Display/Inc
         - Sensor_Driver/Inc
         - Drivers/CMSIS/Device/ST/STM32F4xx/Include
         - Drivers/STM32F4xx_HAL_Driver/Inc

@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F407xx,USE_HAL_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\Core\Inc;..\App\Inc;..\Bsp\Inc;..\Sensor_Driver\Inc;..\Drivers\CMSIS\Device\ST\STM32F4xx\Include;..\Drivers\STM32F4xx_HAL_Driver\Inc;..\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy;..\Middlewares\Source\include;..\Middlewares\Source\portable\RVDS\ARM_CM4F;..\Drivers\CMSIS\Include</IncludePath>
+              <IncludePath>..\Core\Inc;..\App\Inc;..\Bsp\Inc;..\Display\Inc;..\Sensor_Driver\Inc;..\Drivers\CMSIS\Device\ST\STM32F4xx\Include;..\Drivers\STM32F4xx_HAL_Driver\Inc;..\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy;..\Middlewares\Source\include;..\Middlewares\Source\portable\RVDS\ARM_CM4F;..\Drivers\CMSIS\Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -544,6 +544,16 @@
               <FileName>sensor_registry.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Sensor_Driver\Src\sensor_registry.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Display</GroupName>
+          <Files>
+            <File>
+              <FileName>display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Display\Src\display.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -4,6 +4,7 @@
 #include "app_alarm.h"
 #include "app_logger.h"
 #include "app_storage.h"
+#include "display.h"
 #include "sensor_registry.h"
 
 #define APP_REGISTRY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
@@ -14,6 +15,8 @@ static App_CheckResult_t App_RegistryAlarmSelfCheck(uint32_t *error_code);
 static App_CheckResult_t App_RegistryStorageInit(void);
 static App_CheckResult_t App_RegistryStorageSelfCheck(uint32_t *error_code);
 static App_CheckResult_t App_RegistryLoggerInit(void);
+static App_CheckResult_t App_RegistryDisplayInit(void);
+static App_CheckResult_t App_RegistryDisplaySelfCheck(uint32_t *error_code);
 static App_CheckResult_t App_RegistrySensorInit(void);
 static App_CheckResult_t App_RegistrySensorSelfCheck(uint32_t *error_code);
 
@@ -21,6 +24,7 @@ static App_CheckResult_t App_RegistryRunInit(const App_ModuleRegistryEntry_t *en
 static App_CheckResult_t App_RegistryRunSelfCheck(const App_ModuleRegistryEntry_t *entry);
 static App_ModuleState_t App_RegistryStateFromCheck(App_CheckResult_t result);
 static App_CheckResult_t App_RegistryWorst(App_CheckResult_t current, App_CheckResult_t next);
+static App_CheckResult_t App_RegistryCheckFromDisplay(Display_Result_t result);
 static App_CheckResult_t App_RegistryCheckFromSensor(Sensor_CheckResult_t result);
 
 // 模块注册表
@@ -58,8 +62,8 @@ static const App_ModuleRegistryEntry_t s_module_registry[] =
      1000U},
     {APP_MODULE_DISPLAY,
      "display",
-     App_RegistryNoopInit,
-     App_RegistryOkSelfCheck,
+     App_RegistryDisplayInit,
+     App_RegistryDisplaySelfCheck,
      NULL,
      1000U},
     {APP_MODULE_ALARM,
@@ -201,6 +205,16 @@ static App_CheckResult_t App_RegistryLoggerInit(void)
   return APP_CHECK_OK;
 }
 
+static App_CheckResult_t App_RegistryDisplayInit(void)
+{
+  return App_RegistryCheckFromDisplay(Display_Init());
+}
+
+static App_CheckResult_t App_RegistryDisplaySelfCheck(uint32_t *error_code)
+{
+  return App_RegistryCheckFromDisplay(Display_SelfCheck(error_code));
+}
+
 static App_CheckResult_t App_RegistrySensorInit(void)
 {
   return App_RegistryCheckFromSensor(Sensor_RegistryInitAll());
@@ -269,6 +283,19 @@ static App_CheckResult_t App_RegistryWorst(App_CheckResult_t current, App_CheckR
   }
 
   return current;
+}
+
+static App_CheckResult_t App_RegistryCheckFromDisplay(Display_Result_t result)
+{
+  switch (result) {
+    case DISPLAY_OK:
+      return APP_CHECK_OK;
+    case DISPLAY_NOT_READY:
+      return APP_CHECK_NOT_READY;
+    case DISPLAY_ERROR:
+    default:
+      return APP_CHECK_ERROR;
+  }
 }
 
 static App_CheckResult_t App_RegistryCheckFromSensor(Sensor_CheckResult_t result)
