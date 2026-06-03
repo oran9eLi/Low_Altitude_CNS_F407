@@ -16,6 +16,7 @@
 typedef enum {
   SENSOR_TYPE_UNKNOWN = 0, /**< 未分类或暂未明确的设备类型。 */
   SENSOR_TYPE_GNSS,        /**< 导航定位类设备，例如 GNSS 模块。 */
+  SENSOR_TYPE_IMU,         /**< 惯性测量类设备，例如 MPU6050。 */
   SENSOR_TYPE_REMOTE_ID,   /**< 监视类设备，例如 Remote ID 模块。 */
   SENSOR_TYPE_WEATHER,     /**< 气象或环境类传感器，例如 BME280。 */
   SENSOR_TYPE_POWER,       /**< 电源检测类设备，例如电压、电流检测模块。 */

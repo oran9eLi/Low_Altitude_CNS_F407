@@ -8,6 +8,7 @@
 #include "sensor_registry.h"
 
 #define APP_REGISTRY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
+#define APP_REGISTRY_SENSOR_STATUS_MAX 4U
 
 static App_CheckResult_t App_RegistryNoopInit(void);
 static App_CheckResult_t App_RegistryOkSelfCheck(App_ErrorCode_t *error_code);
@@ -26,7 +27,10 @@ static App_AlarmId_t App_RegistryAlarmFromModule(App_ModuleId_t module);
 static App_ModuleState_t App_RegistryStateFromCheck(App_CheckResult_t result);
 static App_CheckResult_t App_RegistryWorst(App_CheckResult_t current, App_CheckResult_t next);
 static App_CheckResult_t App_RegistryCheckFromDisplay(Display_Result_t result);
-static App_CheckResult_t App_RegistryCheckFromSensor(Sensor_CheckResult_t result);
+static App_CheckResult_t App_RegistryCheckFromSensor(Sensor_Severity_t severity);
+static App_AlarmId_t App_RegistryAlarmFromSensorStatus(const Sensor_Status_t *status);
+static App_ErrorCode_t App_RegistryErrorFromSensorStatus(const Sensor_Status_t *status);
+static void App_RegistryPostSensorAlarm(const Sensor_Status_t *status);
 
 // 模块注册表
 static const App_ModuleRegistryEntry_t s_module_registry[] =
@@ -234,16 +238,42 @@ static App_CheckResult_t App_RegistrySensorInit(void)
 
 static App_CheckResult_t App_RegistrySensorSelfCheck(App_ErrorCode_t *error_code)
 {
-  uint32_t driver_error = 0U;
-  Sensor_CheckResult_t sensor_result = Sensor_RegistrySelfCheckAll(&driver_error);
-  App_CheckResult_t result = App_RegistryCheckFromSensor(sensor_result);
+  Sensor_Status_t status_list[APP_REGISTRY_SENSOR_STATUS_MAX];
+  Sensor_Severity_t sensor_severity;
+  Sensor_Severity_t highest_severity = SENSOR_SEVERITY_NORMAL;
+  App_ErrorCode_t current_error = APP_ERROR_OK;
+  uint16_t status_count = 0U;
+  uint16_t i;
+
+  sensor_severity = Sensor_RegistrySelfCheckAbnormal(status_list,
+                                                     APP_REGISTRY_SENSOR_STATUS_MAX,
+                                                     &status_count);
+
+  for (i = 0U; (i < status_count) && (i < APP_REGISTRY_SENSOR_STATUS_MAX); i++)
+  {
+    const Sensor_Status_t *status = &status_list[i];
+    App_ErrorCode_t mapped_error = App_RegistryErrorFromSensorStatus(status);
+
+    App_RegistryPostSensorAlarm(status);
+
+    if (status->severity >= highest_severity)
+    {
+      highest_severity = status->severity;
+      current_error = mapped_error;
+    }
+  }
+
+  if ((status_count == 0U) && (sensor_severity != SENSOR_SEVERITY_NORMAL))
+  {
+    current_error = APP_ERROR_SENSOR_I2C;
+  }
 
   if (error_code != NULL)
   {
-    *error_code = (result == APP_CHECK_OK) ? APP_ERROR_OK : APP_ERROR_SENSOR_I2C;
+    *error_code = current_error;
   }
 
-  return result;
+  return App_RegistryCheckFromSensor(sensor_severity);
 }
 
 static App_CheckResult_t App_RegistryRunInit(const App_ModuleRegistryEntry_t *entry)
@@ -281,7 +311,7 @@ static App_CheckResult_t App_RegistryRunSelfCheck(const App_ModuleRegistryEntry_
   {
     App_StatusSet(entry->id, App_RegistryStateFromCheck(result), error_code);
 
-    if (result >= APP_CHECK_NOT_READY)
+    if ((entry->id != APP_MODULE_SENSOR) && (result >= APP_CHECK_NOT_READY))
     {
       App_AlarmId_t alarm_id = App_RegistryAlarmFromModule(entry->id);
 
@@ -362,18 +392,98 @@ static App_CheckResult_t App_RegistryCheckFromDisplay(Display_Result_t result)
   }
 }
 
-static App_CheckResult_t App_RegistryCheckFromSensor(Sensor_CheckResult_t result)
+static App_CheckResult_t App_RegistryCheckFromSensor(Sensor_Severity_t severity)
 {
-  switch (result)
+  switch (severity)
   {
-  case SENSOR_CHECK_OK:
+  case SENSOR_SEVERITY_NORMAL:
     return APP_CHECK_OK;
-  case SENSOR_CHECK_WARNING:
+  case SENSOR_SEVERITY_GENERAL:
     return APP_CHECK_WARNING;
-  case SENSOR_CHECK_NOT_READY:
-    return APP_CHECK_NOT_READY;
-  case SENSOR_CHECK_ERROR:
+  case SENSOR_SEVERITY_IMPORTANT:
+  case SENSOR_SEVERITY_CRITICAL:
   default:
     return APP_CHECK_ERROR;
+  }
+}
+
+static App_AlarmId_t App_RegistryAlarmFromSensorStatus(const Sensor_Status_t *status)
+{
+  if (status == NULL)
+  {
+    return APP_ALARM_SENSOR_FAULT;
+  }
+
+  if (status->sensor_type == SENSOR_TYPE_GNSS)
+  {
+    if (status->reason == SENSOR_FAULT_NO_FIX)
+    {
+      return APP_ALARM_GNSS_NO_FIX;
+    }
+
+    if ((status->reason == SENSOR_FAULT_OFFLINE) ||
+        (status->reason == SENSOR_FAULT_NO_DATA) ||
+        (status->reason == SENSOR_FAULT_NOT_READY) ||
+        (status->reason == SENSOR_FAULT_TIMEOUT))
+    {
+      return APP_ALARM_GNSS_OFFLINE;
+    }
+  }
+
+  return APP_ALARM_SENSOR_FAULT;
+}
+
+static App_ErrorCode_t App_RegistryErrorFromSensorStatus(const Sensor_Status_t *status)
+{
+  if (status == NULL)
+  {
+    return APP_ERROR_SENSOR_I2C;
+  }
+
+  if (status->sensor_type == SENSOR_TYPE_GNSS)
+  {
+    if (status->reason == SENSOR_FAULT_NO_FIX)
+    {
+      return APP_ERROR_GNSS_NO_FIX;
+    }
+
+    if ((status->reason == SENSOR_FAULT_OFFLINE) ||
+        (status->reason == SENSOR_FAULT_NO_DATA) ||
+        (status->reason == SENSOR_FAULT_NOT_READY) ||
+        (status->reason == SENSOR_FAULT_TIMEOUT))
+    {
+      return APP_ERROR_GNSS_OFFLINE;
+    }
+  }
+
+  return APP_ERROR_SENSOR_I2C;
+}
+
+static void App_RegistryPostSensorAlarm(const Sensor_Status_t *status)
+{
+  App_AlarmMsg_t msg;
+  App_AlarmPayload_t payload;
+  App_AlarmResult_t result;
+
+  if ((status == NULL) || (status->severity == SENSOR_SEVERITY_NORMAL))
+  {
+    return;
+  }
+
+  payload.sensor.device_id = status->device_id;
+  payload.sensor.sensor_type = (uint16_t)status->sensor_type;
+  payload.sensor.severity = (uint16_t)status->severity;
+  payload.sensor.fault_reason = (uint16_t)status->reason;
+  payload.sensor.driver_error = status->driver_error;
+
+  result = App_AlarmBuildRaiseMsg(&msg,
+                                  App_RegistryAlarmFromSensorStatus(status),
+                                  APP_MODULE_SENSOR,
+                                  App_RegistryErrorFromSensorStatus(status),
+                                  APP_ALARM_PAYLOAD_SENSOR,
+                                  &payload);
+  if (result == APP_ALARM_RESULT_OK)
+  {
+    (void)App_AlarmPost(&msg, 0U);
   }
 }

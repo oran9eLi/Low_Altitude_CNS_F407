@@ -4,8 +4,8 @@
 #include "task.h"
 #include <string.h>
 
-#define APP_ALARM_QUEUE_LENGTH      8U
-#define APP_ALARM_TASK_PERIOD_MS    200U
+#define APP_ALARM_QUEUE_LENGTH 8U
+#define APP_ALARM_TASK_PERIOD_MS 200U
 
 /**
  * @brief 当前激活告警位图。
@@ -33,11 +33,7 @@ static App_AlarmRecord_t s_alarm_records[APP_ALARM_COUNT];
  */
 static QueueHandle_t s_alarm_queue;
 
-static App_AlarmResult_t App_AlarmApplyRaise(App_AlarmId_t alarm_id,
-                                             App_ModuleId_t source,
-                                             App_ErrorCode_t error_code,
-                                             App_AlarmPayloadType_t payload_type,
-                                             const App_AlarmPayload_t *payload);
+static App_AlarmResult_t App_AlarmApplyRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
 static App_AlarmResult_t App_AlarmApplyClear(App_AlarmId_t alarm_id);
 static App_AlarmResult_t App_AlarmDispatchMsg(const App_AlarmMsg_t *msg);
 static App_ErrorCode_t App_AlarmGetDefaultError(App_AlarmId_t alarm_id);
@@ -101,12 +97,7 @@ void App_AlarmInit(void)
  * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
  * @retval APP_ALARM_RESULT_INVALID_PARAM 参数无效。
  */
-App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg,
-                                         App_AlarmId_t alarm_id,
-                                         App_ModuleId_t source,
-                                         App_ErrorCode_t error_code,
-                                         App_AlarmPayloadType_t payload_type,
-                                         const App_AlarmPayload_t *payload)
+App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
 {
   if (msg == NULL)
   {
@@ -154,11 +145,7 @@ App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg,
  * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
  * @retval APP_ALARM_RESULT_INVALID_PARAM 参数无效。
  */
-App_AlarmResult_t App_AlarmBuildRaiseDefaultMsg(App_AlarmMsg_t *msg,
-                                                App_AlarmId_t alarm_id,
-                                                App_ModuleId_t source,
-                                                App_AlarmPayloadType_t payload_type,
-                                                const App_AlarmPayload_t *payload)
+App_AlarmResult_t App_AlarmBuildRaiseDefaultMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
 {
   if (App_AlarmIsValidId(alarm_id) == 0U)
   {
@@ -342,11 +329,7 @@ App_AlarmResult_t App_AlarmRaiseImmediate(App_AlarmId_t alarm_id, App_ModuleId_t
  * @param payload payload 数据。
  * @retval APP_ALARM_RESULT_OK 告警已记录。
  */
-static App_AlarmResult_t App_AlarmApplyRaise(App_AlarmId_t alarm_id,
-                                             App_ModuleId_t source,
-                                             App_ErrorCode_t error_code,
-                                             App_AlarmPayloadType_t payload_type,
-                                             const App_AlarmPayload_t *payload)
+static App_AlarmResult_t App_AlarmApplyRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
 {
   App_AlarmRecord_t *record;
   uint32_t detail;
@@ -416,11 +399,7 @@ static App_AlarmResult_t App_AlarmDispatchMsg(const App_AlarmMsg_t *msg)
   switch (msg->header.msg_type)
   {
   case APP_ALARM_MSG_RAISE:
-    return App_AlarmApplyRaise(msg->header.alarm_id,
-                               msg->header.source,
-                               msg->header.error_code,
-                               msg->header.payload_type,
-                               &msg->payload);
+    return App_AlarmApplyRaise(msg->header.alarm_id, msg->header.source, msg->header.error_code, msg->header.payload_type, &msg->payload);
   case APP_ALARM_MSG_CLEAR:
     return App_AlarmApplyClear(msg->header.alarm_id);
   default:

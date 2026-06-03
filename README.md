@@ -67,7 +67,7 @@ V1.0 只聚焦主控箱本体：
 ```text
 App
   -> Sensor_RegistryReadAll()
-      -> Sensor_Driver_t.Read()
+      -> Sensor_Driver_t.read()
           -> Bsp UART/RS485/CAN/I2C/SPI raw transfer
   -> App_LogWrite() / App_ProtocolEncode() / Display refresh
 ```
@@ -105,19 +105,19 @@ main()
       -> App_RegistryInitAll()
           -> Sensor_RegistryInitAll()
       -> App_RegistrySelfCheckAll()
-          -> Sensor_RegistrySelfCheckAll()
+          -> Sensor_RegistrySelfCheckAbnormal()
       -> create FreeRTOS tasks
   -> vTaskStartScheduler()
 ```
 
-运行阶段由 `system` 任务周期调用 `App_RegistryPoll()`，系统注册表会按 `check_period_ms` 触发各模块自检。`sensor` 模块的自检入口会继续下沉到 `Sensor_RegistrySelfCheckAll()`。
+运行阶段由 `system` 任务周期调用 `App_RegistryPoll()`，系统注册表会按 `check_period_ms` 触发各模块自检。`sensor` 模块的自检入口会继续下沉到 `Sensor_RegistrySelfCheckAbnormal()`，用于取得具体异常传感器的严重程度、故障原因和驱动细节码。
 
 ## 传感器驱动接口
 
 `Sensor_Driver` 目录目前提供统一接口骨架：
 
 - `sensor_data.h`：定义 `Sensor_Sample_t`、`Sensor_Value_t`、`Sensor_Type_t` 和 `Sensor_ValueType_t`
-- `sensor_driver.h`：定义 `Sensor_Driver_t`，统一 `init`、`self_check`、`read`、`get_status` 函数指针
+- `sensor_driver.h`：定义 `Sensor_Driver_t`、`Sensor_Status_t`、`Sensor_Severity_t` 和 `Sensor_FaultReason_t`
 - `sensor_registry.h/.c`：统一传感器初始化、自检、批量读取和驱动查询入口
 
 具体传感器驱动应实现一个 `Sensor_Driver_t`：
@@ -125,7 +125,7 @@ main()
 ```c
 static const Sensor_Driver_t g_gnss_driver =
 {
-  .device_id = 1U,
+  .device_id = SENSOR_DEVICE_GNSS_1,
   .sensor_type = SENSOR_TYPE_GNSS,
   .name = "gnss",
   .init = Gnss_Init,

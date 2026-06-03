@@ -51,6 +51,29 @@ App_AlarmResult_t App_AlarmRaiseDefault(App_AlarmId_t alarm_id, App_ModuleId_t s
   return APP_ALARM_RESULT_OK;
 }
 
+App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg,
+                                         App_AlarmId_t alarm_id,
+                                         App_ModuleId_t source,
+                                         App_ErrorCode_t error_code,
+                                         App_AlarmPayloadType_t payload_type,
+                                         const App_AlarmPayload_t *payload)
+{
+  (void)msg;
+  (void)alarm_id;
+  (void)source;
+  (void)error_code;
+  (void)payload_type;
+  (void)payload;
+  return APP_ALARM_RESULT_OK;
+}
+
+BaseType_t App_AlarmPost(const App_AlarmMsg_t *msg, TickType_t timeout_ticks)
+{
+  (void)msg;
+  (void)timeout_ticks;
+  return pdPASS;
+}
+
 uint32_t App_AlarmGetActiveMask(void)
 {
   return 0U;
@@ -114,22 +137,17 @@ Display_Result_t Display_Refresh(uint32_t now_ms)
   return DISPLAY_OK;
 }
 
-Sensor_CheckResult_t Sensor_RegistryInitAll(void)
+Sensor_Severity_t Sensor_RegistryInitAll(void)
 {
-  return SENSOR_CHECK_OK;
+  return SENSOR_SEVERITY_NORMAL;
 }
 
-Sensor_CheckResult_t Sensor_RegistrySelfCheckAll(uint32_t *error_code)
+Sensor_Severity_t Sensor_RegistrySelfCheckAll(void)
 {
-  if (error_code != 0)
-  {
-    *error_code = 0U;
-  }
-
-  return SENSOR_CHECK_OK;
+  return SENSOR_SEVERITY_NORMAL;
 }
 
-Sensor_CheckResult_t Sensor_RegistrySelfCheckAbnormal(Sensor_CheckStatus_t *status_list, uint16_t max_count, uint16_t *out_count)
+Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
 {
   (void)status_list;
   (void)max_count;
@@ -139,20 +157,32 @@ Sensor_CheckResult_t Sensor_RegistrySelfCheckAbnormal(Sensor_CheckStatus_t *stat
     *out_count = 0U;
   }
 
-  return SENSOR_CHECK_OK;
+  return SENSOR_SEVERITY_NORMAL;
 }
 
-Sensor_CheckResult_t Sensor_RegistryReadAll(Sensor_Sample_t *samples, uint16_t max_count, uint16_t *out_count)
+Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples,
+                                         uint16_t max_sample_count,
+                                         uint16_t *out_sample_count,
+                                         Sensor_Status_t *status_list,
+                                         uint16_t max_status_count,
+                                         uint16_t *out_status_count)
 {
   (void)samples;
-  (void)max_count;
+  (void)max_sample_count;
+  (void)status_list;
+  (void)max_status_count;
 
-  if (out_count != 0)
+  if (out_sample_count != 0)
   {
-    *out_count = 0U;
+    *out_sample_count = 0U;
   }
 
-  return SENSOR_CHECK_OK;
+  if (out_status_count != 0)
+  {
+    *out_status_count = 0U;
+  }
+
+  return SENSOR_SEVERITY_NORMAL;
 }
 
 uint16_t Sensor_RegistryGetCount(void)

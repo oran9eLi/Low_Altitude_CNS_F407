@@ -5,32 +5,65 @@
 #include "sensor_data.h"
 
 /**
- * @brief 传感器驱动检查结果。
+ * @brief 传感器异常严重程度。
  *
- * 该结果用于驱动初始化、自检、读取和状态查询。枚举值按严重程度递增，
+ * 该枚举只表达异常影响级别，不表达具体故障原因。枚举值按严重程度递增，
  * 注册表会用数值更大的结果作为更严重结果。
  */
 typedef enum {
-  SENSOR_CHECK_OK = 0,    /**< 正常。 */
-  SENSOR_CHECK_WARNING,   /**< 有警告但可继续运行，例如数据质量下降。 */
-  SENSOR_CHECK_NOT_READY, /**< 尚未就绪，例如未收到首帧或总线未准备好。 */
-  SENSOR_CHECK_ERROR      /**< 设备不可用或存在严重错误。 */
-} Sensor_CheckResult_t;
+  SENSOR_SEVERITY_NORMAL = 0, /**< 正常。 */
+  SENSOR_SEVERITY_GENERAL,    /**< 一般异常，不影响主系统运行。 */
+  SENSOR_SEVERITY_IMPORTANT,  /**< 重要异常，影响实验或数据可信度。 */
+  SENSOR_SEVERITY_CRITICAL    /**< 严重异常，需要停机或人工处理。 */
+} Sensor_Severity_t;
+
+/**
+ * @brief 传感器域内故障原因。
+ *
+ * 该枚举只表达驱动观察到的事实原因，不表达 App 层告警项或标准错误码。
+ */
+typedef enum {
+  SENSOR_FAULT_NONE = 0,    /**< 无异常。 */
+  SENSOR_FAULT_NOT_READY,   /**< 设备或数据尚未就绪。 */
+  SENSOR_FAULT_TIMEOUT,     /**< 通信或采样超时。 */
+  SENSOR_FAULT_BUS,         /**< I2C、UART、SPI 等总线异常。 */
+  SENSOR_FAULT_OFFLINE,     /**< 设备离线或长时间无响应。 */
+  SENSOR_FAULT_NO_DATA,     /**< 当前无有效数据。 */
+  SENSOR_FAULT_DATA_INVALID,/**< 数据格式、校验或数值无效。 */
+  SENSOR_FAULT_NO_FIX,      /**< GNSS 无有效定位。 */
+  SENSOR_FAULT_INIT_FAILED  /**< 初始化失败。 */
+} Sensor_FaultReason_t;
+
+/**
+ * @brief 传感器状态事实。
+ *
+ * 驱动通过该结构向注册表输出严重程度、原因和原始细节码。
+ * App 层再根据这些事实映射为告警项、标准错误码、日志和显示内容。
+ */
+typedef struct
+{
+  uint16_t device_id;              /**< 设备编号，由项目设备编号表统一分配。 */
+  Sensor_Type_t sensor_type;       /**< 传感器类型。 */
+  Sensor_Severity_t severity;      /**< 异常严重程度。 */
+  Sensor_FaultReason_t reason;     /**< 传感器域内故障原因。 */
+  uint32_t driver_error;           /**< 驱动原始细节码，例如 HAL 返回值或芯片状态。 */
+} Sensor_Status_t;
 
 /**
  * @brief 传感器初始化函数指针类型。
  *
- * @return 初始化结果。
+ * @param[out] status 可选状态输出，可以为 NULL。
+ * @return 初始化严重程度。
  */
-typedef Sensor_CheckResult_t (*Sensor_InitFn)(void);
+typedef Sensor_Severity_t (*Sensor_InitFn)(Sensor_Status_t *status);
 
 /**
  * @brief 传感器自检函数指针类型。
  *
- * @param[out] error_code 可选错误码输出，可以为 NULL。
- * @return 自检结果。
+ * @param[out] status 可选状态输出，可以为 NULL。
+ * @return 自检严重程度。
  */
-typedef Sensor_CheckResult_t (*Sensor_SelfCheckFn)(uint32_t *error_code);
+typedef Sensor_Severity_t (*Sensor_SelfCheckFn)(Sensor_Status_t *status);
 
 /**
  * @brief 传感器采样读取函数指针类型。
@@ -38,19 +71,20 @@ typedef Sensor_CheckResult_t (*Sensor_SelfCheckFn)(uint32_t *error_code);
  * @param[out] samples 调用方提供的采样输出缓冲区。
  * @param[in] max_count samples 最多可容纳的采样记录数量。
  * @param[out] out_count 可选输出，表示实际写入的采样记录数量。
- * @return 读取结果。
+ * @param[out] status 可选状态输出，可以为 NULL。
+ * @return 读取严重程度。
  */
-typedef Sensor_CheckResult_t (*Sensor_ReadFn)(Sensor_Sample_t *samples, uint16_t max_count, uint16_t *out_count);
+typedef Sensor_Severity_t (*Sensor_ReadFn)(Sensor_Sample_t *samples, uint16_t max_count, uint16_t *out_count, Sensor_Status_t *status);
 
 /**
  * @brief 传感器状态查询函数指针类型。
  *
  * 与 self_check 的区别是：get_status 应尽量只返回当前缓存状态，不主动触发耗时总线读写。
  *
- * @param[out] error_code 可选错误码输出，可以为 NULL。
- * @return 当前状态结果。
+ * @param[out] status 可选状态输出，可以为 NULL。
+ * @return 当前状态严重程度。
  */
-typedef Sensor_CheckResult_t (*Sensor_GetStatusFn)(uint32_t *error_code);
+typedef Sensor_Severity_t (*Sensor_GetStatusFn)(Sensor_Status_t *status);
 
 /**
  * @brief 传感器驱动句柄。

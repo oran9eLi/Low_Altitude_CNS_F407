@@ -1,19 +1,19 @@
 #include "app_tasks.h"
-#include <string.h>
-#include "task.h"
 #include "app_alarm.h"
 #include "app_logger.h"
 #include "app_protocol.h"
 #include "app_registry.h"
 #include "app_status.h"
 #include "display.h"
+#include "task.h"
+#include <string.h>
 
-#define APP_TASK_STACK_SYSTEM   (configMINIMAL_STACK_SIZE * 2U)
-#define APP_TASK_STACK_COMM     (configMINIMAL_STACK_SIZE * 2U)
+#define APP_TASK_STACK_SYSTEM (configMINIMAL_STACK_SIZE * 2U)
+#define APP_TASK_STACK_COMM (configMINIMAL_STACK_SIZE * 2U)
 #define APP_TASK_STACK_PROTOCOL (configMINIMAL_STACK_SIZE * 2U)
-#define APP_TASK_STACK_LOGGER   (configMINIMAL_STACK_SIZE * 3U)
-#define APP_TASK_STACK_DISPLAY  (configMINIMAL_STACK_SIZE * 2U)
-#define APP_TASK_STACK_ALARM    (configMINIMAL_STACK_SIZE * 2U)
+#define APP_TASK_STACK_LOGGER (configMINIMAL_STACK_SIZE * 3U)
+#define APP_TASK_STACK_DISPLAY (configMINIMAL_STACK_SIZE * 2U)
+#define APP_TASK_STACK_ALARM (configMINIMAL_STACK_SIZE * 2U)
 
 static void App_SystemTask(void *argument);
 static void App_CommTask(void *argument);
@@ -29,37 +29,45 @@ BaseType_t App_TasksInit(void)
 
   init_result = App_RegistryInitAll();
   (void)App_AlarmProcessPending(0U);
-  if (init_result == APP_CHECK_ERROR) {
+  if (init_result == APP_CHECK_ERROR)
+  {
     return pdFAIL;
   }
 
   self_check_result = App_RegistrySelfCheckAll();
   (void)App_AlarmProcessPending(0U);
-  if (self_check_result == APP_CHECK_ERROR) {
+  if (self_check_result == APP_CHECK_ERROR)
+  {
     return pdFAIL;
   }
 
-  if (xTaskCreate(App_SystemTask, "system", APP_TASK_STACK_SYSTEM, NULL, tskIDLE_PRIORITY + 3U, NULL) != pdPASS) {
+  if (xTaskCreate(App_SystemTask, "system", APP_TASK_STACK_SYSTEM, NULL, tskIDLE_PRIORITY + 3U, NULL) != pdPASS)
+  {
     return pdFAIL;
   }
 
-  if (xTaskCreate(App_CommTask, "comm", APP_TASK_STACK_COMM, NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS) {
+  if (xTaskCreate(App_CommTask, "comm", APP_TASK_STACK_COMM, NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
+  {
     return pdFAIL;
   }
 
-  if (xTaskCreate(App_ProtocolTask, "protocol", APP_TASK_STACK_PROTOCOL, NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS) {
+  if (xTaskCreate(App_ProtocolTask, "protocol", APP_TASK_STACK_PROTOCOL, NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
+  {
     return pdFAIL;
   }
 
-  if (xTaskCreate(App_LoggerTask, "logger", APP_TASK_STACK_LOGGER, NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS) {
+  if (xTaskCreate(App_LoggerTask, "logger", APP_TASK_STACK_LOGGER, NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
+  {
     return pdFAIL;
   }
 
-  if (xTaskCreate(App_DisplayTask, "display", APP_TASK_STACK_DISPLAY, NULL, tskIDLE_PRIORITY + 1U, NULL) != pdPASS) {
+  if (xTaskCreate(App_DisplayTask, "display", APP_TASK_STACK_DISPLAY, NULL, tskIDLE_PRIORITY + 1U, NULL) != pdPASS)
+  {
     return pdFAIL;
   }
 
-  if (xTaskCreate(App_AlarmTask, "alarm", APP_TASK_STACK_ALARM, NULL, tskIDLE_PRIORITY + 1U, NULL) != pdPASS) {
+  if (xTaskCreate(App_AlarmTask, "alarm", APP_TASK_STACK_ALARM, NULL, tskIDLE_PRIORITY + 1U, NULL) != pdPASS)
+  {
     return pdFAIL;
   }
 
@@ -80,7 +88,8 @@ static void App_SystemTask(void *argument)
   strncpy(log_record.value, "ok", sizeof(log_record.value));
   strncpy(log_record.unit, "-", sizeof(log_record.unit));
 
-  for (;;) {
+  for (;;)
+  {
     log_record.timestamp_ms = xTaskGetTickCount();
     App_RegistryPoll(log_record.timestamp_ms);
     (void)App_LogWrite(&log_record);
@@ -94,7 +103,8 @@ static void App_CommTask(void *argument)
   (void)argument;
   App_StatusSet(APP_MODULE_COMM, APP_STATE_OK, APP_ERROR_OK);
 
-  for (;;) {
+  for (;;)
+  {
     App_StatusHeartbeat(APP_MODULE_COMM);
     vTaskDelay(pdMS_TO_TICKS(500));
   }
@@ -107,15 +117,21 @@ static void App_DisplayTask(void *argument)
   (void)argument;
   App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, APP_ERROR_OK);
 
-  for (;;) {
+  for (;;)
+  {
     result = Display_Refresh(xTaskGetTickCount());
 
-    if (result == DISPLAY_OK) {
+    if (result == DISPLAY_OK)
+    {
       App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, APP_ERROR_OK);
       App_StatusHeartbeat(APP_MODULE_DISPLAY);
-    } else if (result == DISPLAY_NOT_READY) {
+    }
+    else if (result == DISPLAY_NOT_READY)
+    {
       App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OFFLINE, APP_ERROR_HMI_OFFLINE);
-    } else {
+    }
+    else
+    {
       App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_ERROR, APP_ERROR_HMI_OFFLINE);
       (void)App_AlarmRaise(APP_ALARM_HMI_OFFLINE,
                            APP_MODULE_DISPLAY,
@@ -131,7 +147,8 @@ void vApplicationMallocFailedHook(void)
 {
   (void)App_AlarmRaiseImmediate(APP_ALARM_HEAP_FAILED, APP_MODULE_SYSTEM, APP_ERROR_HEAP_FAILED, 0U);
   taskDISABLE_INTERRUPTS();
-  for (;;) {
+  for (;;)
+  {
   }
 }
 
@@ -141,6 +158,7 @@ void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name)
   (void)task_name;
   (void)App_AlarmRaiseImmediate(APP_ALARM_STACK_OVERFLOW, APP_MODULE_SYSTEM, APP_ERROR_STACK_OVERFLOW, 0U);
   taskDISABLE_INTERRUPTS();
-  for (;;) {
+  for (;;)
+  {
   }
 }

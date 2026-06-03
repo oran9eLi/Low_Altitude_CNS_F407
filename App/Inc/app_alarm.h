@@ -65,6 +65,8 @@ typedef struct
 {
   uint16_t device_id;
   uint16_t sensor_type;
+  uint16_t severity;
+  uint16_t fault_reason;
   uint32_t driver_error;
 } App_AlarmSensorPayload_t;
 
@@ -87,8 +89,7 @@ typedef struct
   uint32_t task_id;
 } App_AlarmSystemPayload_t;
 
-typedef union
-{
+typedef union {
   uint32_t raw_detail;
   App_AlarmSensorPayload_t sensor;
   App_AlarmCommPayload_t comm;
@@ -116,17 +117,8 @@ typedef struct
 } App_AlarmRecord_t;
 
 void App_AlarmInit(void);
-App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg,
-                                         App_AlarmId_t alarm_id,
-                                         App_ModuleId_t source,
-                                         App_ErrorCode_t error_code,
-                                         App_AlarmPayloadType_t payload_type,
-                                         const App_AlarmPayload_t *payload);
-App_AlarmResult_t App_AlarmBuildRaiseDefaultMsg(App_AlarmMsg_t *msg,
-                                                App_AlarmId_t alarm_id,
-                                                App_ModuleId_t source,
-                                                App_AlarmPayloadType_t payload_type,
-                                                const App_AlarmPayload_t *payload);
+App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
+App_AlarmResult_t App_AlarmBuildRaiseDefaultMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
 App_AlarmResult_t App_AlarmBuildClearMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source);
 BaseType_t App_AlarmPost(const App_AlarmMsg_t *msg, TickType_t timeout_ticks);
 BaseType_t App_AlarmPostFromISR(const App_AlarmMsg_t *msg, BaseType_t *higher_priority_task_woken);
