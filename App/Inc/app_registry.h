@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "app_error.h"
 #include "app_status.h"
 
 // 自检结果定义
@@ -14,7 +15,7 @@ typedef enum {
 } App_CheckResult_t;
 
 typedef App_CheckResult_t (*App_ModuleInitFn)(void);
-typedef App_CheckResult_t (*App_ModuleSelfCheckFn)(uint32_t *error_code);
+typedef App_CheckResult_t (*App_ModuleSelfCheckFn)(App_ErrorCode_t *error_code);
 typedef void (*App_ModuleServiceFn)(void);
 
 typedef struct

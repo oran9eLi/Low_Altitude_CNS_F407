@@ -30,7 +30,7 @@ CNS_LOG_YYYYMMDD_NNN.csv
 | motor_pwm_2 | % | motor | 电机 2 占空比 |
 | motor_pwm_3 | % | motor | 电机 3 占空比 |
 | motor_pwm_4 | % | motor | 电机 4 占空比 |
-| alarm_code | - | alarm | 当前报警码 |
+| alarm_code | - | alarm | 当前标准错误码，使用 `App_ErrorCode_t` |
 
 ## 规则
 

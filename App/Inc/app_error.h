@@ -1,0 +1,22 @@
+#ifndef APP_ERROR_H
+#define APP_ERROR_H
+
+#include <stdint.h>
+
+typedef enum {
+  APP_ERROR_OK                = 0x0000U,
+  APP_ERROR_SELF_CHECK_FAILED = 0x0001U,
+  APP_ERROR_HEAP_FAILED       = 0x0002U,
+  APP_ERROR_STACK_OVERFLOW    = 0x0003U,
+  APP_ERROR_HMI_OFFLINE       = 0x1001U,
+  APP_ERROR_GNSS_OFFLINE      = 0x1101U,
+  APP_ERROR_GNSS_NO_FIX       = 0x1102U,
+  APP_ERROR_SENSOR_I2C        = 0x1201U,
+  APP_ERROR_LORA_OFFLINE      = 0x1301U,
+  APP_ERROR_SD_MOUNT          = 0x1401U,
+  APP_ERROR_POWER_LOW         = 0x1501U,
+  APP_ERROR_MOTOR_FAULT       = 0x1601U,
+  APP_ERROR_UNKNOWN           = 0xFFFFU
+} App_ErrorCode_t;
+
+#endif

@@ -18,18 +18,24 @@
 static void App_SystemTask(void *argument);
 static void App_CommTask(void *argument);
 static void App_DisplayTask(void *argument);
-static void App_AlarmTask(void *argument);
 
 BaseType_t App_TasksInit(void)
 {
+  App_CheckResult_t init_result;
+  App_CheckResult_t self_check_result;
+
   App_StatusInit();
   App_AlarmInit();
 
-  if (App_RegistryInitAll() == APP_CHECK_ERROR) {
+  init_result = App_RegistryInitAll();
+  (void)App_AlarmProcessPending(0U);
+  if (init_result == APP_CHECK_ERROR) {
     return pdFAIL;
   }
 
-  if (App_RegistrySelfCheckAll() == APP_CHECK_ERROR) {
+  self_check_result = App_RegistrySelfCheckAll();
+  (void)App_AlarmProcessPending(0U);
+  if (self_check_result == APP_CHECK_ERROR) {
     return pdFAIL;
   }
 
@@ -65,7 +71,7 @@ static void App_SystemTask(void *argument)
   App_LogRecord_t log_record;
 
   (void)argument;
-  App_StatusSet(APP_MODULE_SYSTEM, APP_STATE_OK, 0U);
+  App_StatusSet(APP_MODULE_SYSTEM, APP_STATE_OK, APP_ERROR_OK);
 
   memset(&log_record, 0, sizeof(log_record));
   log_record.level = APP_LOG_LEVEL_INFO;
@@ -86,7 +92,7 @@ static void App_SystemTask(void *argument)
 static void App_CommTask(void *argument)
 {
   (void)argument;
-  App_StatusSet(APP_MODULE_COMM, APP_STATE_OK, 0U);
+  App_StatusSet(APP_MODULE_COMM, APP_STATE_OK, APP_ERROR_OK);
 
   for (;;) {
     App_StatusHeartbeat(APP_MODULE_COMM);
@@ -99,40 +105,31 @@ static void App_DisplayTask(void *argument)
   Display_Result_t result;
 
   (void)argument;
-  App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, 0U);
+  App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, APP_ERROR_OK);
 
   for (;;) {
     result = Display_Refresh(xTaskGetTickCount());
 
     if (result == DISPLAY_OK) {
-      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, 0U);
+      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, APP_ERROR_OK);
       App_StatusHeartbeat(APP_MODULE_DISPLAY);
     } else if (result == DISPLAY_NOT_READY) {
-      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OFFLINE, (uint32_t)result);
+      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OFFLINE, APP_ERROR_HMI_OFFLINE);
     } else {
-      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_ERROR, (uint32_t)result);
-      App_AlarmRaise(APP_ALARM_SELF_CHECK_FAILED, APP_MODULE_DISPLAY, (uint32_t)result);
+      App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_ERROR, APP_ERROR_HMI_OFFLINE);
+      (void)App_AlarmRaise(APP_ALARM_HMI_OFFLINE,
+                           APP_MODULE_DISPLAY,
+                           APP_ERROR_HMI_OFFLINE,
+                           (uint32_t)result);
     }
 
     vTaskDelay(pdMS_TO_TICKS(200));
   }
 }
 
-static void App_AlarmTask(void *argument)
-{
-  (void)argument;
-  App_StatusSet(APP_MODULE_ALARM, APP_STATE_OK, 0U);
-
-  for (;;) {
-    (void)App_AlarmGetActiveMask();
-    App_StatusHeartbeat(APP_MODULE_ALARM);
-    vTaskDelay(pdMS_TO_TICKS(200));
-  }
-}
-
 void vApplicationMallocFailedHook(void)
 {
-  App_AlarmRaise(APP_ALARM_HEAP_FAILED, APP_MODULE_SYSTEM, 0U);
+  (void)App_AlarmRaiseImmediate(APP_ALARM_HEAP_FAILED, APP_MODULE_SYSTEM, APP_ERROR_HEAP_FAILED, 0U);
   taskDISABLE_INTERRUPTS();
   for (;;) {
   }
@@ -142,7 +139,7 @@ void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name)
 {
   (void)task;
   (void)task_name;
-  App_AlarmRaise(APP_ALARM_STACK_OVERFLOW, APP_MODULE_SYSTEM, 0U);
+  (void)App_AlarmRaiseImmediate(APP_ALARM_STACK_OVERFLOW, APP_MODULE_SYSTEM, APP_ERROR_STACK_OVERFLOW, 0U);
   taskDISABLE_INTERRUPTS();
   for (;;) {
   }

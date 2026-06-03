@@ -42,7 +42,7 @@ typedef struct {
 | motor | pwm[4] | uint8 | 4 路 PWM 占空比 |
 | log | enabled | uint8 | 日志开关 |
 | log | file_index | uint16 | 当前文件编号 |
-| alarm | current_code | uint16 | 当前报警码 |
+| alarm | current_code | uint16 | 当前标准错误码，使用 `App_ErrorCode_t` |
 
 ## 规则
 
@@ -50,3 +50,4 @@ typedef struct {
 2. 日志、HMI 和上报协议只读取 `CNS_State` 快照，不直接读取驱动内部变量。
 3. 多任务访问时必须使用互斥锁、临界区、消息队列或双缓冲快照，避免读到不一致的数据组合。
 4. 字段修改必须同步更新 HMI、CSV、上报协议和测试文档。
+5. `alarm.current_code` 使用标准错误码 `App_ErrorCode_t`，不使用内部告警项 `App_AlarmId_t` 或 active mask。

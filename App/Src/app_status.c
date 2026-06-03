@@ -12,11 +12,11 @@ void App_StatusInit(void)
     s_module_status[i].state        = APP_STATE_INIT;
     s_module_status[i].heartbeat    = 0U;
     s_module_status[i].last_tick_ms = 0U;
-    s_module_status[i].error_code   = 0U;
+    s_module_status[i].error_code   = APP_ERROR_OK;
   }
 }
 
-void App_StatusSet(App_ModuleId_t module, App_ModuleState_t state, uint32_t error_code)
+void App_StatusSet(App_ModuleId_t module, App_ModuleState_t state, App_ErrorCode_t error_code)
 {
   if (module >= APP_MODULE_COUNT) {
     return;
@@ -39,7 +39,7 @@ void App_StatusHeartbeat(App_ModuleId_t module)
 
 App_ModuleStatus_t App_StatusGet(App_ModuleId_t module)
 {
-  App_ModuleStatus_t empty_status = {APP_STATE_ERROR, 0U, 0U, 1U};
+  App_ModuleStatus_t empty_status = {APP_STATE_ERROR, 0U, 0U, APP_ERROR_UNKNOWN};
 
   if (module >= APP_MODULE_COUNT) {
     return empty_status;

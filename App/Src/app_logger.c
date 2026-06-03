@@ -52,7 +52,7 @@ void App_LoggerTask(void *argument)
   int len;
 
   (void)argument;
-  App_StatusSet(APP_MODULE_LOGGER, APP_STATE_OK, 0U);
+  App_StatusSet(APP_MODULE_LOGGER, APP_STATE_OK, APP_ERROR_OK);
 
   for (;;) {
     if (xQueueReceive(s_log_queue, &record, pdMS_TO_TICKS(1000)) == pdPASS) {
@@ -68,7 +68,10 @@ void App_LoggerTask(void *argument)
                      (unsigned long)record.status);
       if ((len <= 0) || ((size_t)len >= sizeof(line)) ||
           (App_StorageWriteCsvLine(line, (size_t)len) != APP_STORAGE_OK)) {
-        App_AlarmRaise(APP_ALARM_LOG_STORAGE_FAILED, APP_MODULE_LOGGER, 1U);
+        (void)App_AlarmRaise(APP_ALARM_LOG_STORAGE_FAILED,
+                             APP_MODULE_LOGGER,
+                             APP_ERROR_SD_MOUNT,
+                             1U);
       }
     }
 

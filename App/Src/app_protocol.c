@@ -60,7 +60,7 @@ void App_ProtocolTask(void *argument)
   App_LogRecord_t log_record;
 
   (void)argument;
-  App_StatusSet(APP_MODULE_PROTOCOL, APP_STATE_OK, 0U);
+  App_StatusSet(APP_MODULE_PROTOCOL, APP_STATE_OK, APP_ERROR_OK);
 
   for (;;) {
     if (App_ProtocolParse(demo_frame, sizeof(demo_frame), &message) == APP_PROTOCOL_OK) {

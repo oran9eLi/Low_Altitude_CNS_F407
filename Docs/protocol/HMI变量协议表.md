@@ -13,7 +13,7 @@
 | 待定 | humidity | uint16 | 0.1%RH | BME280 | 1000ms | 只读 | 湿度 |
 | 待定 | lora_status | uint16 | - | LoRa | 500ms | 只读 | 通信状态 |
 | 待定 | lora_loss_rate | uint16 | 0.1% | LoRa | 1000ms | 只读 | 丢包率 |
-| 待定 | alarm_code | uint16 | - | Alarm | 200ms | 只读 | 当前报警码 |
+| 待定 | alarm_code | uint16 | - | Alarm | 200ms | 只读 | 当前标准错误码，使用 `App_ErrorCode_t` |
 | 待定 | log_enable | uint16 | - | HMI/Param | 事件 | 读写 | 日志开关 |
 | 待定 | motor_pwm_1 | uint16 | % | HMI/Motor | 事件 | 读写 | 电机 1 占空比 |
 
