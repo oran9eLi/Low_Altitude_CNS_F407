@@ -133,12 +133,12 @@
             <UseExternalTool>0</UseExternalTool>
             <RunIndependent>0</RunIndependent>
             <UpdateFlashBeforeDebugging>1</UpdateFlashBeforeDebugging>
-            <Capability>0</Capability>
-            <DriverSelection>-1</DriverSelection>
+            <Capability>1</Capability>
+            <DriverSelection>4096</DriverSelection>
           </Flash1>
           <bUseTDR>1</bUseTDR>
           <Flash2>BIN\UL2CM3.DLL</Flash2>
-          <Flash3></Flash3>
+          <Flash3>"" ()</Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -187,7 +187,7 @@
             <hadIRAM2>1</hadIRAM2>
             <hadIROM2>0</hadIROM2>
             <StupSel>8</StupSel>
-            <useUlib>0</useUlib>
+            <useUlib>1</useUlib>
             <EndSel>0</EndSel>
             <uLtcg>0</uLtcg>
             <nSecure>0</nSecure>
@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F407xx,USE_HAL_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\Core\Inc;..\App\Inc;..\Bsp\Inc;..\Display\Inc;..\Sensor_Driver\Inc;..\Drivers\CMSIS\Device\ST\STM32F4xx\Include;..\Drivers\STM32F4xx_HAL_Driver\Inc;..\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy;..\Middlewares\Source\include;..\Middlewares\Source\portable\RVDS\ARM_CM4F;..\Drivers\CMSIS\Include</IncludePath>
+              <IncludePath>..\Core\Inc;..\Debug\Inc;..\App\Inc;..\Bsp\Inc;..\Display\Inc;..\Sensor_Driver\Inc;..\Drivers\CMSIS\Device\ST\STM32F4xx\Include;..\Drivers\STM32F4xx_HAL_Driver\Inc;..\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy;..\Middlewares\Source\include;..\Middlewares\Source\portable\RVDS\ARM_CM4F;..\Drivers\CMSIS\Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -404,6 +404,21 @@
               <FileName>stm32f4xx_hal_timebase_tim.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\stm32f4xx_hal_timebase_tim.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Debug</GroupName>
+          <Files>
+            <File>
+              <FileName>debug_console.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Debug\Src\debug_console.c</FilePath>
+            </File>
+            <File>
+              <FileName>debug_cns_demo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Debug\Src\debug_cns_demo.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -544,6 +559,11 @@
               <FileName>sensor_registry.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Sensor_Driver\Src\sensor_registry.c</FilePath>
+            </File>
+            <File>
+              <FileName>mock_sensor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Sensor_Driver\Src\mock_sensor.c</FilePath>
             </File>
           </Files>
         </Group>

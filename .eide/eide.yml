@@ -19,6 +19,11 @@ virtualFolder:
             - path: Core/Src/system_stm32f4xx.c
             - path: Core/Src/stm32f4xx_hal_timebase_tim.c
           folders: []
+    - name: Debug
+      files:
+        - path: Debug/Src/debug_console.c
+        - path: Debug/Src/debug_cns_demo.c
+      folders: []
     - name: HAL_Driver
       files:
         - path: Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
@@ -56,6 +61,7 @@ virtualFolder:
     - name: Sensor_Driver
       files:
         - path: Sensor_Driver/Src/sensor_registry.c
+        - path: Sensor_Driver/Src/mock_sensor.c
       folders: []
     - name: Display
       files:
@@ -82,6 +88,7 @@ targets:
         - USE_HAL_DRIVER
       incList:
         - Core/Inc
+        - Debug/Inc
         - App/Inc
         - Bsp/Inc
         - Display/Inc
@@ -119,7 +126,7 @@ targets:
             warnings: all-warnings
           global:
             output-debug-info: enable
-            use-microLIB: false
+            use-microLIB: true
           linker:
             $disableOutputTask: false
             $outputTaskExcludes:

@@ -6,6 +6,9 @@
 #include "app_alarm.h"
 #include "app_status.h"
 #include "app_storage.h"
+/***************DEBUG***************/
+#include "debug_trace.h"
+/*************DEBUG END*************/
 
 #define APP_LOG_QUEUE_LENGTH 16U
 
@@ -53,6 +56,10 @@ void App_LoggerTask(void *argument)
 
   (void)argument;
   App_StatusSet(APP_MODULE_LOGGER, APP_STATE_OK, APP_ERROR_OK);
+
+  /***************DEBUG***************/
+  DBG_TRACE_TASK_STARTED("logger");
+  /*************DEBUG END*************/
 
   for (;;) {
     if (xQueueReceive(s_log_queue, &record, pdMS_TO_TICKS(1000)) == pdPASS) {

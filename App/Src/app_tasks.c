@@ -6,6 +6,7 @@
 #include "app_status.h"
 #include "display.h"
 #include "task.h"
+#include "debug_trace.h"
 #include <string.h>
 
 #define APP_TASK_STACK_SYSTEM (configMINIMAL_STACK_SIZE * 2U)
@@ -27,19 +28,41 @@ BaseType_t App_TasksInit(void)
   App_StatusInit();
   App_AlarmInit();
 
+  /***************DEBUG***************/
+  DBG_TRACE_POST_INIT_START();
+  /*************DEBUG END*************/
+
   init_result = App_RegistryInitAll();
   (void)App_AlarmProcessPending(0U);
+
+  /***************DEBUG***************/
+  DBG_TRACE_POST_INIT_DONE(init_result);
+  /*************DEBUG END*************/
+
   if (init_result == APP_CHECK_ERROR)
   {
     return pdFAIL;
   }
 
+  /***************DEBUG***************/
+  DBG_TRACE_POST_SELF_CHECK_START();
+  /*************DEBUG END*************/
+
   self_check_result = App_RegistrySelfCheckAll();
   (void)App_AlarmProcessPending(0U);
+
+  /***************DEBUG***************/
+  DBG_TRACE_POST_SELF_CHECK_DONE(self_check_result);
+  /*************DEBUG END*************/
+
   if (self_check_result == APP_CHECK_ERROR)
   {
     return pdFAIL;
   }
+
+  /***************DEBUG***************/
+  DBG_TRACE_TASKS_READY();
+  /*************DEBUG END*************/
 
   if (xTaskCreate(App_SystemTask, "system", APP_TASK_STACK_SYSTEM, NULL, tskIDLE_PRIORITY + 3U, NULL) != pdPASS)
   {
@@ -81,6 +104,10 @@ static void App_SystemTask(void *argument)
   (void)argument;
   App_StatusSet(APP_MODULE_SYSTEM, APP_STATE_OK, APP_ERROR_OK);
 
+  /***************DEBUG***************/
+  DBG_TRACE_TASK_STARTED("system");
+  /*************DEBUG END*************/
+
   memset(&log_record, 0, sizeof(log_record));
   log_record.level = APP_LOG_LEVEL_INFO;
   strncpy(log_record.module, "SYSTEM", sizeof(log_record.module));
@@ -103,6 +130,10 @@ static void App_CommTask(void *argument)
   (void)argument;
   App_StatusSet(APP_MODULE_COMM, APP_STATE_OK, APP_ERROR_OK);
 
+  /***************DEBUG***************/
+  DBG_TRACE_TASK_STARTED("comm");
+  /*************DEBUG END*************/
+
   for (;;)
   {
     App_StatusHeartbeat(APP_MODULE_COMM);
@@ -116,6 +147,10 @@ static void App_DisplayTask(void *argument)
 
   (void)argument;
   App_StatusSet(APP_MODULE_DISPLAY, APP_STATE_OK, APP_ERROR_OK);
+
+  /***************DEBUG***************/
+  DBG_TRACE_TASK_STARTED("display");
+  /*************DEBUG END*************/
 
   for (;;)
   {

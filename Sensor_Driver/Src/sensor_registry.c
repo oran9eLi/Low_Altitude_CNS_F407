@@ -9,6 +9,13 @@
 
 #include "sensor_registry.h"
 
+/***************DEBUG***************/
+#include "debug_config.h"
+#ifdef DEBUG_ENABLE
+extern const Sensor_Driver_t g_mock_sensor_driver;
+#endif
+/*************DEBUG END*************/
+
 #include <stddef.h>
 
 /**
@@ -63,8 +70,13 @@ static void Sensor_RegistryInitStatus(const Sensor_Driver_t *driver, Sensor_Stat
  */
 static const Sensor_Driver_t *const s_sensor_drivers[] =
   {
+/***************DEBUG***************/
+#ifdef DEBUG_ENABLE
+    &g_mock_sensor_driver,
+#endif
+/*************DEBUG END*************/
     NULL,
-};
+  };
 
 /**
  * @brief 初始化所有已注册的传感器驱动。

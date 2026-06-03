@@ -2,6 +2,9 @@
 #include "app_status.h"
 #include "queue.h"
 #include "task.h"
+/***************DEBUG***************/
+#include "debug_trace.h"
+/*************DEBUG END*************/
 #include <string.h>
 
 #define APP_ALARM_QUEUE_LENGTH 8U
@@ -543,6 +546,10 @@ void App_AlarmTask(void *argument)
 {
   (void)argument;
   App_StatusSet(APP_MODULE_ALARM, APP_STATE_OK, APP_ERROR_OK);
+
+  /***************DEBUG***************/
+  DBG_TRACE_TASK_STARTED("alarm");
+  /*************DEBUG END*************/
 
   for (;;)
   {

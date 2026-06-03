@@ -20,6 +20,7 @@ typedef struct
   uint16_t payload_len;
 } App_ProtocolMessage_t;
 
+App_ProtocolResult_t App_ProtocolBuildFrame(uint8_t type, const uint8_t *payload, uint16_t payload_len, uint8_t *frame, uint16_t frame_max_len, uint16_t *frame_len);
 App_ProtocolResult_t App_ProtocolParse(const uint8_t *frame, size_t length, App_ProtocolMessage_t *message);
 void App_ProtocolTask(void *argument);
 

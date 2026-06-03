@@ -1,14 +1,23 @@
 #include "bsp_uart.h"
 
-void BSP_UART_Init(void)
+/***************DEBUG***************/
+static UART_HandleTypeDef huart1;
+
+HAL_StatusTypeDef BSP_UART_Init(void)
 {
-  /* Configure concrete GNSS/Remote-ID/diagnostic UART ports after pin allocation is confirmed. */
+  huart1.Instance          = USART1;
+  huart1.Init.BaudRate     = 115200;
+  huart1.Init.WordLength   = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits     = UART_STOPBITS_1;
+  huart1.Init.Parity       = UART_PARITY_NONE;
+  huart1.Init.Mode         = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  return HAL_UART_Init(&huart1);
 }
 
 HAL_StatusTypeDef BSP_UART_Send(const uint8_t *data, uint16_t length, uint32_t timeout_ms)
 {
-  (void)data;
-  (void)length;
-  (void)timeout_ms;
-  return HAL_OK;
+  return HAL_UART_Transmit(&huart1, (uint8_t *)data, length, timeout_ms);
 }
+/*************DEBUG END*************/

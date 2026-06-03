@@ -3,21 +3,66 @@
 #include "task.h"
 #include "app_tasks.h"
 #include "bsp.h"
+#include "debug_console.h"
+#include "debug_trace.h"
 
 static void SystemClock_Config(void);
 
 int main(void)
 {
+  BaseType_t tasks_init_result;
+  uint32_t boot_hold_index;
+
   HAL_Init();
   SystemClock_Config();
 
+  /***************DEBUG***************/
+  DebugConsole_Init();
+#ifdef DEBUG_BOOT_UART_ONLY
+  while (1) {
+    static const char raw_loop[] = "[RAW] " DBG_TEXT_PROJECT " USART1 " DBG_TEXT_LOOP_SEND "\r\n";
+    (void)BSP_UART_Send((const uint8_t *)raw_loop, (uint16_t)(sizeof(raw_loop) - 1U), 100U);
+    printf("[DBG] " DBG_TEXT_PROJECT " printf " DBG_TEXT_LOOP_SEND "\r\n");
+    HAL_Delay(1000U);
+  }
+#endif
+  for (boot_hold_index = 0U; boot_hold_index < 5U; boot_hold_index++) {
+    DBG_PRINT("main: " DBG_TEXT_BOOT_HOLD " %lu/5", (unsigned long)(boot_hold_index + 1U));
+    HAL_Delay(1000U);
+  }
+
+  DBG_PRINT("main: BSP " DBG_TEXT_INIT_START);
+  /*************DEBUG END*************/
+
   BSP_Init();
 
-  if (App_TasksInit() != pdPASS) {
+  /***************DEBUG***************/
+  DBG_PRINT("main: BSP " DBG_TEXT_INIT_DONE);
+  DBG_PRINT("main: " DBG_TEXT_APP_TASK_INIT_START);
+  /*************DEBUG END*************/
+
+  tasks_init_result = App_TasksInit();
+
+  /***************DEBUG***************/
+  DBG_PRINT("main: " DBG_TEXT_APP_TASK_INIT_RESULT "=%d", (int)tasks_init_result);
+  /*************DEBUG END*************/
+
+  if (tasks_init_result != pdPASS) {
+    /***************DEBUG***************/
+    DBG_PRINT("main: " DBG_TEXT_APP_TASK_INIT_FAILED);
+    /*************DEBUG END*************/
     Error_Handler();
   }
 
+  /***************DEBUG***************/
+  DBG_PRINT("main: " DBG_TEXT_ENTER " FreeRTOS " DBG_TEXT_SCHEDULER);
+  /*************DEBUG END*************/
+
   vTaskStartScheduler();
+
+  /***************DEBUG***************/
+  DBG_PRINT("main: FreeRTOS " DBG_TEXT_SCHEDULER DBG_TEXT_ABNORMAL_RETURN);
+  /*************DEBUG END*************/
 
   Error_Handler();
 }

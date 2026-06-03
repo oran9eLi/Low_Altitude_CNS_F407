@@ -77,6 +77,30 @@ void HAL_MspDeInit(void)
    */
 }
 
+/***************DEBUG***************/
+/**
+  * @brief UART MSP Initialization
+  *        Configures USART1 GPIO pins: PA9 (TX), PA10 (RX)
+  * @param huart: UART handle pointer
+  * @retval None
+  */
+void HAL_UART_MspInit(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1) {
+    __HAL_RCC_USART1_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    GPIO_InitTypeDef gpio = {0};
+    gpio.Pin       = GPIO_PIN_9 | GPIO_PIN_10;
+    gpio.Mode      = GPIO_MODE_AF_PP;
+    gpio.Pull      = GPIO_NOPULL;
+    gpio.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
+    gpio.Alternate = GPIO_AF7_USART1;
+    HAL_GPIO_Init(GPIOA, &gpio);
+  }
+}
+/*************DEBUG END*************/
+
 /**
  * @}
  */
