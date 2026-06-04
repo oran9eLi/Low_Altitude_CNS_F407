@@ -20,6 +20,15 @@ static void App_SystemTask(void *argument);
 static void App_CommTask(void *argument);
 static void App_DisplayTask(void *argument);
 
+/**
+ * @brief 初始化应用层状态、告警和 FreeRTOS 任务。
+ *
+ * 该函数在调度器启动前调用，先完成状态模块和告警模块初始化，再通过系统注册表
+ * 执行模块初始化和启动自检。自检通过后创建系统、通信、协议、日志、显示和告警任务。
+ *
+ * @retval pdPASS 应用任务创建完成。
+ * @retval pdFAIL 模块初始化、自检或任务创建失败。
+ */
 BaseType_t App_TasksInit(void)
 {
   App_CheckResult_t init_result;
@@ -97,6 +106,14 @@ BaseType_t App_TasksInit(void)
   return pdPASS;
 }
 
+/**
+ * @brief 系统任务入口。
+ *
+ * 周期执行系统心跳、注册表轮询和启动状态日志写入。注册表轮询会驱动各模块
+ * 的周期服务和周期自检，是应用层运行期健康检查的集中入口。
+ *
+ * @param argument FreeRTOS 任务参数，当前未使用。
+ */
 static void App_SystemTask(void *argument)
 {
   App_LogRecord_t log_record;
@@ -125,6 +142,13 @@ static void App_SystemTask(void *argument)
   }
 }
 
+/**
+ * @brief 通信任务入口。
+ *
+ * 当前通信任务维护通信模块状态和心跳，后续 LoRa 链路收发调度可在该任务中扩展。
+ *
+ * @param argument FreeRTOS 任务参数，当前未使用。
+ */
 static void App_CommTask(void *argument)
 {
   (void)argument;
@@ -141,6 +165,13 @@ static void App_CommTask(void *argument)
   }
 }
 
+/**
+ * @brief 显示任务入口。
+ *
+ * 周期刷新显示模块，并根据刷新结果更新显示模块状态。显示异常时投递 HMI 离线告警。
+ *
+ * @param argument FreeRTOS 任务参数，当前未使用。
+ */
 static void App_DisplayTask(void *argument)
 {
   Display_Result_t result;
@@ -178,6 +209,11 @@ static void App_DisplayTask(void *argument)
   }
 }
 
+/**
+ * @brief FreeRTOS 动态内存申请失败钩子。
+ *
+ * 触发后立即上报堆内存失败告警并关闭中断，系统停留在错误现场。
+ */
 void vApplicationMallocFailedHook(void)
 {
   (void)App_AlarmRaiseImmediate(APP_ALARM_HEAP_FAILED, APP_MODULE_SYSTEM, APP_ERROR_HEAP_FAILED, 0U);
@@ -187,6 +223,14 @@ void vApplicationMallocFailedHook(void)
   }
 }
 
+/**
+ * @brief FreeRTOS 任务栈溢出钩子。
+ *
+ * 触发后立即上报栈溢出告警并关闭中断，系统停留在错误现场。
+ *
+ * @param task 发生栈溢出的任务句柄。
+ * @param task_name 发生栈溢出的任务名称。
+ */
 void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name)
 {
   (void)task;
