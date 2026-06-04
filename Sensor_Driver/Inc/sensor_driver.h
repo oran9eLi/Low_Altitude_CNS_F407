@@ -2,6 +2,7 @@
 #define SENSOR_DRIVER_H
 
 #include <stdint.h>
+#include "app_error.h"
 #include "sensor_data.h"
 
 /**
@@ -18,35 +19,18 @@ typedef enum {
 } Sensor_Severity_t;
 
 /**
- * @brief 传感器域内故障原因。
- *
- * 该枚举只表达驱动观察到的事实原因，不表达 App 层告警项或标准错误码。
- */
-typedef enum {
-  SENSOR_FAULT_NONE = 0,    /**< 无异常。 */
-  SENSOR_FAULT_NOT_READY,   /**< 设备或数据尚未就绪。 */
-  SENSOR_FAULT_TIMEOUT,     /**< 通信或采样超时。 */
-  SENSOR_FAULT_BUS,         /**< I2C、UART、SPI 等总线异常。 */
-  SENSOR_FAULT_OFFLINE,     /**< 设备离线或长时间无响应。 */
-  SENSOR_FAULT_NO_DATA,     /**< 当前无有效数据。 */
-  SENSOR_FAULT_DATA_INVALID,/**< 数据格式、校验或数值无效。 */
-  SENSOR_FAULT_NO_FIX,      /**< GNSS 无有效定位。 */
-  SENSOR_FAULT_INIT_FAILED  /**< 初始化失败。 */
-} Sensor_FaultReason_t;
-
-/**
  * @brief 传感器状态事实。
  *
- * 驱动通过该结构向注册表输出严重程度、原因和原始细节码。
- * App 层再根据这些事实映射为告警项、标准错误码、日志和显示内容。
+ * 驱动通过该结构向注册表输出严重程度、统一错误码和原始细节码。
+ * `code` 必须使用 ERR_SENSOR_* 范围内的错误码；正常时填写 ERR_OK。
  */
 typedef struct
 {
   uint16_t device_id;              /**< 设备编号，由项目设备编号表统一分配。 */
   Sensor_Type_t sensor_type;       /**< 传感器类型。 */
   Sensor_Severity_t severity;      /**< 异常严重程度。 */
-  Sensor_FaultReason_t reason;     /**< 传感器域内故障原因。 */
-  uint32_t driver_error;           /**< 驱动原始细节码，例如 HAL 返回值或芯片状态。 */
+  App_ErrorCode_t code;            /**< 全系统统一错误码，传感器驱动只填写 ERR_SENSOR_* 或 ERR_OK。 */
+  uint32_t driver_error;           /**< 可选驱动细节码，例如 HAL 返回值、芯片状态或阶段码；没有细节时填 0。 */
 } Sensor_Status_t;
 
 /**

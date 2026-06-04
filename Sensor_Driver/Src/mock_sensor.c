@@ -27,7 +27,7 @@ static Sensor_Severity_t MockSensor_Init(Sensor_Status_t *status)
     status->device_id    = SENSOR_DEVICE_GNSS_1;
     status->sensor_type  = SENSOR_TYPE_GNSS;
     status->severity     = SENSOR_SEVERITY_NORMAL;
-    status->reason       = SENSOR_FAULT_NONE;
+    status->code         = ERR_OK;
     status->driver_error = 0U;
   }
   return SENSOR_SEVERITY_NORMAL;
@@ -47,10 +47,10 @@ static Sensor_Severity_t MockSensor_SelfCheck(Sensor_Status_t *status)
 
     if (is_abnormal != 0U) {
       status->severity = SENSOR_SEVERITY_GENERAL;
-      status->reason   = SENSOR_FAULT_NO_FIX;
+      status->code     = ERR_SENSOR_NO_FIX;
     } else {
       status->severity = SENSOR_SEVERITY_NORMAL;
-      status->reason   = SENSOR_FAULT_NONE;
+      status->code     = ERR_OK;
     }
   }
   return is_abnormal ? SENSOR_SEVERITY_GENERAL : SENSOR_SEVERITY_NORMAL;
@@ -94,7 +94,7 @@ static Sensor_Severity_t MockSensor_Read(Sensor_Sample_t *samples, uint16_t max_
     status->device_id    = SENSOR_DEVICE_GNSS_1;
     status->sensor_type  = SENSOR_TYPE_GNSS;
     status->severity     = SENSOR_SEVERITY_NORMAL;
-    status->reason       = SENSOR_FAULT_NONE;
+    status->code         = ERR_OK;
     status->driver_error = 0U;
   }
 
@@ -107,7 +107,7 @@ static Sensor_Severity_t MockSensor_GetStatus(Sensor_Status_t *status)
     status->device_id    = SENSOR_DEVICE_GNSS_1;
     status->sensor_type  = SENSOR_TYPE_GNSS;
     status->severity     = SENSOR_SEVERITY_NORMAL;
-    status->reason       = SENSOR_FAULT_NONE;
+    status->code         = ERR_OK;
     status->driver_error = 0U;
   }
   return SENSOR_SEVERITY_NORMAL;

@@ -6,11 +6,14 @@
 #include "app_error.h"
 #include "app_status.h"
 
+#define APP_ALARM_NAME_LEN 16U
+
 typedef enum {
   APP_ALARM_RESULT_OK = 0,
-  APP_ALARM_RESULT_INVALID_ID,
   APP_ALARM_RESULT_INVALID_PARAM,
-  APP_ALARM_RESULT_QUEUE_FAILED
+  APP_ALARM_RESULT_QUEUE_FAILED,
+  APP_ALARM_RESULT_NOT_FOUND,
+  APP_ALARM_RESULT_NO_SLOT
 } App_AlarmResult_t;
 
 typedef enum {
@@ -21,81 +24,66 @@ typedef enum {
 } App_AlarmSeverity_t;
 
 typedef enum {
-  APP_ALARM_MSG_RAISE = 0,
-  APP_ALARM_MSG_CLEAR
-} App_AlarmMsgType_t;
+  APP_ALARM_OP_RAISE = 0,
+  APP_ALARM_OP_CLEAR
+} App_AlarmOp_t;
 
 typedef enum {
   APP_ALARM_PAYLOAD_NONE = 0,
-  APP_ALARM_PAYLOAD_RAW,
   APP_ALARM_PAYLOAD_SENSOR,
   APP_ALARM_PAYLOAD_COMM,
   APP_ALARM_PAYLOAD_STORAGE,
-  APP_ALARM_PAYLOAD_SYSTEM
+  APP_ALARM_PAYLOAD_SYSTEM,
+  APP_ALARM_PAYLOAD_RAW
 } App_AlarmPayloadType_t;
 
-typedef enum {
-  APP_ALARM_NONE = 0,
-  APP_ALARM_SELF_CHECK_FAILED,
-  APP_ALARM_HMI_OFFLINE,
-  APP_ALARM_GNSS_OFFLINE,
-  APP_ALARM_GNSS_NO_FIX,
-  APP_ALARM_SENSOR_FAULT,
-  APP_ALARM_LORA_OFFLINE,
-  APP_ALARM_STORAGE_FAILED,
-  APP_ALARM_POWER_LOW,
-  APP_ALARM_MOTOR_FAULT,
-  APP_ALARM_LOG_STORAGE_FAILED,
-  APP_ALARM_HEAP_FAILED,
-  APP_ALARM_STACK_OVERFLOW,
-  APP_ALARM_COUNT
-} App_AlarmId_t;
-
 typedef struct
 {
-  App_AlarmMsgType_t msg_type;
-  App_AlarmId_t alarm_id;
-  App_ModuleId_t source;
-  App_ErrorCode_t error_code;
-  App_AlarmPayloadType_t payload_type;
-  uint32_t timestamp_ms;
-} App_AlarmMsgHeader_t;
-
-typedef struct
-{
-  uint16_t device_id;
+  uint16_t sensor_id;
   uint16_t sensor_type;
-  uint16_t severity;
-  uint16_t fault_reason;
-  uint32_t driver_error;
+  char name[APP_ALARM_NAME_LEN];
+  uint32_t detail;
 } App_AlarmSensorPayload_t;
 
 typedef struct
 {
-  uint8_t link_id;
+  uint16_t link_id;
   uint32_t timeout_ms;
-  uint32_t link_error;
+  uint32_t detail;
 } App_AlarmCommPayload_t;
 
 typedef struct
 {
-  uint32_t storage_error;
-  uint32_t file_index;
+  uint16_t target_id;
+  uint32_t operation;
+  uint32_t detail;
 } App_AlarmStoragePayload_t;
 
 typedef struct
 {
   uint32_t hook_code;
   uint32_t task_id;
+  uint32_t detail;
 } App_AlarmSystemPayload_t;
 
 typedef union {
-  uint32_t raw_detail;
   App_AlarmSensorPayload_t sensor;
   App_AlarmCommPayload_t comm;
   App_AlarmStoragePayload_t storage;
   App_AlarmSystemPayload_t system;
+  uint32_t raw_detail;
 } App_AlarmPayload_t;
+
+typedef struct
+{
+  App_AlarmOp_t op;
+  App_ModuleId_t source;
+  App_AlarmSeverity_t severity;
+  App_ErrorCode_t code;
+  App_AlarmPayloadType_t payload_type;
+  uint16_t instance_id;
+  uint32_t timestamp_ms;
+} App_AlarmMsgHeader_t;
 
 typedef struct
 {
@@ -105,31 +93,28 @@ typedef struct
 
 typedef struct
 {
-  App_AlarmId_t alarm_id;
-  App_ModuleId_t source;
-  App_ErrorCode_t error_code;
-  App_AlarmSeverity_t severity;
-  App_AlarmPayloadType_t payload_type;
-  App_AlarmPayload_t payload;
-  uint32_t detail;
-  uint32_t count;
   uint8_t active;
+  App_ModuleId_t source;
+  App_AlarmSeverity_t severity;
+  App_ErrorCode_t code;
+  App_AlarmPayloadType_t payload_type;
+  uint16_t instance_id;
+  uint32_t first_tick_ms;
+  uint32_t last_tick_ms;
+  App_AlarmPayload_t payload;
 } App_AlarmRecord_t;
 
 void App_AlarmInit(void);
-App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
-App_AlarmResult_t App_AlarmBuildRaiseDefaultMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
-App_AlarmResult_t App_AlarmBuildClearMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source);
+App_AlarmResult_t App_AlarmBuildMsg(App_AlarmMsg_t *msg, App_AlarmOp_t op, App_ModuleId_t source, App_AlarmSeverity_t severity, App_ErrorCode_t code, uint16_t instance_id, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
 BaseType_t App_AlarmPost(const App_AlarmMsg_t *msg, TickType_t timeout_ticks);
 BaseType_t App_AlarmPostFromISR(const App_AlarmMsg_t *msg, BaseType_t *higher_priority_task_woken);
-App_AlarmResult_t App_AlarmRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, uint32_t detail);
-App_AlarmResult_t App_AlarmRaiseDefault(App_AlarmId_t alarm_id, App_ModuleId_t source, uint32_t detail);
-App_AlarmResult_t App_AlarmRaiseImmediate(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, uint32_t detail);
-App_AlarmResult_t App_AlarmClear(App_AlarmId_t alarm_id);
-uint32_t App_AlarmGetActiveMask(void);
-App_AlarmResult_t App_AlarmGetRecord(App_AlarmId_t alarm_id, App_AlarmRecord_t *record);
-App_ErrorCode_t App_AlarmGetCurrentError(void);
 uint32_t App_AlarmProcessPending(uint32_t max_messages);
 void App_AlarmTask(void *argument);
+
+uint16_t App_AlarmGetActiveCount(void);
+App_AlarmResult_t App_AlarmGetRecord(uint16_t index, App_AlarmRecord_t *record);
+uint16_t App_AlarmFindBySourceInstance(App_ModuleId_t source, uint16_t instance_id, App_AlarmRecord_t *records, uint16_t max_count);
+App_ErrorCode_t App_AlarmGetCurrentCode(void);
+App_AlarmSeverity_t App_AlarmGetCurrentSeverity(void);
 
 #endif

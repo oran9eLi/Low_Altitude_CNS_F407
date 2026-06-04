@@ -30,11 +30,11 @@ typedef struct
   App_ModuleState_t state;
   uint32_t heartbeat;
   uint32_t last_tick_ms;
-  App_ErrorCode_t error_code;
+  App_ErrorCode_t code;
 } App_ModuleStatus_t;
 
 void App_StatusInit(void);
-void App_StatusSet(App_ModuleId_t module, App_ModuleState_t state, App_ErrorCode_t error_code);
+void App_StatusSet(App_ModuleId_t module, App_ModuleState_t state, App_ErrorCode_t code);
 void App_StatusHeartbeat(App_ModuleId_t module);
 App_ModuleStatus_t App_StatusGet(App_ModuleId_t module);
 

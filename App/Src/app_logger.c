@@ -14,6 +14,8 @@
 
 static QueueHandle_t s_log_queue;
 
+static void App_LoggerPostAlarm(App_AlarmOp_t op, App_ErrorCode_t code, uint32_t detail);
+
 static const char *App_LogLevelToString(App_LogLevel_t level)
 {
   switch (level) {
@@ -55,7 +57,7 @@ void App_LoggerTask(void *argument)
   int len;
 
   (void)argument;
-  App_StatusSet(APP_MODULE_LOGGER, APP_STATE_OK, APP_ERROR_OK);
+  App_StatusSet(APP_MODULE_LOGGER, APP_STATE_OK, ERR_OK);
 
   /***************DEBUG***************/
   DBG_TRACE_TASK_STARTED("logger");
@@ -63,25 +65,43 @@ void App_LoggerTask(void *argument)
 
   for (;;) {
     if (xQueueReceive(s_log_queue, &record, pdMS_TO_TICKS(1000)) == pdPASS) {
-      len = snprintf(line,
-                     sizeof(line),
-                     "%lu,%s,%s,%s,%s,%s,%lu\r\n",
-                     (unsigned long)record.timestamp_ms,
-                     App_LogLevelToString(record.level),
-                     record.module,
-                     record.field,
-                     record.value,
-                     record.unit,
-                     (unsigned long)record.status);
+      len = snprintf(line, sizeof(line), "%lu,%s,%s,%s,%s,%s,%lu\r\n", (unsigned long)record.timestamp_ms, App_LogLevelToString(record.level), record.module, record.field, record.value, record.unit, (unsigned long)record.status);
       if ((len <= 0) || ((size_t)len >= sizeof(line)) ||
           (App_StorageWriteCsvLine(line, (size_t)len) != APP_STORAGE_OK)) {
-        (void)App_AlarmRaise(APP_ALARM_LOG_STORAGE_FAILED,
-                             APP_MODULE_LOGGER,
-                             APP_ERROR_SD_MOUNT,
-                             1U);
+        App_StatusSet(APP_MODULE_LOGGER, APP_STATE_ERROR, ERR_LOG_WRITE_FAILED);
+        App_LoggerPostAlarm(APP_ALARM_OP_RAISE, ERR_LOG_WRITE_FAILED, 1U);
+      } else {
+        App_StatusSet(APP_MODULE_LOGGER, APP_STATE_OK, ERR_OK);
+        App_LoggerPostAlarm(APP_ALARM_OP_CLEAR, ERR_LOG_WRITE_FAILED, 0U);
       }
     }
 
     App_StatusHeartbeat(APP_MODULE_LOGGER);
+  }
+}
+
+/**
+ * @brief 投递日志模块异常状态变化消息。
+ */
+static void App_LoggerPostAlarm(App_AlarmOp_t op, App_ErrorCode_t code, uint32_t detail)
+{
+  App_AlarmMsg_t msg;
+  App_AlarmPayload_t payload;
+  App_AlarmPayloadType_t payload_type = APP_ALARM_PAYLOAD_NONE;
+  App_AlarmPayload_t *payload_ptr = NULL;
+
+  (void)memset(&payload, 0, sizeof(payload));
+  if (op == APP_ALARM_OP_RAISE)
+  {
+    payload.storage.target_id = 0U;
+    payload.storage.operation = 1U;
+    payload.storage.detail = detail;
+    payload_type = APP_ALARM_PAYLOAD_STORAGE;
+    payload_ptr = &payload;
+  }
+
+  if (App_AlarmBuildMsg(&msg, op, APP_MODULE_LOGGER, (op == APP_ALARM_OP_RAISE) ? APP_ALARM_SEVERITY_IMPORTANT : APP_ALARM_SEVERITY_NORMAL, code, 0U, payload_type, payload_ptr) == APP_ALARM_RESULT_OK)
+  {
+    (void)App_AlarmPost(&msg, 0U);
   }
 }

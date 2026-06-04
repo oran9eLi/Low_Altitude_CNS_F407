@@ -56,7 +56,7 @@ static void Sensor_RegistryInitStatus(const Sensor_Driver_t *driver, Sensor_Stat
   status->device_id    = (driver != NULL) ? driver->device_id : 0U;
   status->sensor_type  = (driver != NULL) ? driver->sensor_type : SENSOR_TYPE_UNKNOWN;
   status->severity     = SENSOR_SEVERITY_NORMAL;
-  status->reason       = SENSOR_FAULT_NONE;
+  status->code         = ERR_OK;
   status->driver_error = 0U;
 }
 
@@ -210,12 +210,7 @@ Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list,
  * 输出缓冲区无效时返回 SENSOR_SEVERITY_IMPORTANT；
  * 其他情况返回驱动上报的最严重程度。
  */
-Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples,
-                                         uint16_t max_sample_count,
-                                         uint16_t *out_sample_count,
-                                         Sensor_Status_t *status_list,
-                                         uint16_t max_status_count,
-                                         uint16_t *out_status_count)
+Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples, uint16_t max_sample_count, uint16_t *out_sample_count, Sensor_Status_t *status_list, uint16_t max_status_count, uint16_t *out_status_count)
 {
   Sensor_Severity_t result = SENSOR_SEVERITY_NORMAL;
   uint16_t total_count        = 0U;
@@ -243,10 +238,7 @@ Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples,
       Sensor_Severity_t driver_result;
 
       Sensor_RegistryInitStatus(driver, &status);
-      driver_result = driver->read(&samples[total_count],
-                                   (uint16_t)(max_sample_count - total_count),
-                                   &driver_count,
-                                   &status);
+      driver_result = driver->read(&samples[total_count], (uint16_t)(max_sample_count - total_count), &driver_count, &status);
 
       if (status.severity < driver_result) {
         status.severity = driver_result;

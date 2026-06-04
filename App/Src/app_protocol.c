@@ -94,7 +94,7 @@ void App_ProtocolTask(void *argument)
   App_LogRecord_t log_record;
 
   (void)argument;
-  App_StatusSet(APP_MODULE_PROTOCOL, APP_STATE_OK, APP_ERROR_OK);
+  App_StatusSet(APP_MODULE_PROTOCOL, APP_STATE_OK, ERR_OK);
 
   /***************DEBUG***************/
   DBG_TRACE_TASK_STARTED("protocol");

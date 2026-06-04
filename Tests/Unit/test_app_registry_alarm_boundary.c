@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "app_registry.h"
 #include "app_alarm.h"
@@ -8,11 +9,8 @@
 #include "display.h"
 #include "sensor_registry.h"
 
-static App_AlarmId_t s_last_alarm_id;
-static App_ModuleId_t s_last_alarm_source;
-static uint32_t s_last_alarm_detail;
-static uint8_t s_default_alarm_called;
-static uint8_t s_explicit_alarm_called;
+static App_AlarmMsg_t s_last_alarm_msg;
+static uint8_t s_alarm_posted;
 
 static int expect_true(int condition, const char *message)
 {
@@ -25,63 +23,72 @@ static int expect_true(int condition, const char *message)
   return 0;
 }
 
-void App_StatusSet(App_ModuleId_t module, App_ModuleState_t state, App_ErrorCode_t error_code)
+void App_StatusSet(App_ModuleId_t module, App_ModuleState_t state, App_ErrorCode_t code)
 {
   (void)module;
   (void)state;
-  (void)error_code;
+  (void)code;
 }
 
-App_AlarmResult_t App_AlarmRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, uint32_t detail)
+App_AlarmResult_t App_AlarmBuildMsg(App_AlarmMsg_t *msg, App_AlarmOp_t op, App_ModuleId_t source, App_AlarmSeverity_t severity, App_ErrorCode_t code, uint16_t instance_id, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
 {
-  s_last_alarm_id         = alarm_id;
-  s_last_alarm_source     = source;
-  s_last_alarm_detail     = detail;
-  s_explicit_alarm_called = 1U;
-  (void)error_code;
-  return APP_ALARM_RESULT_OK;
-}
+  if (msg == 0)
+  {
+    return APP_ALARM_RESULT_INVALID_PARAM;
+  }
 
-App_AlarmResult_t App_AlarmRaiseDefault(App_AlarmId_t alarm_id, App_ModuleId_t source, uint32_t detail)
-{
-  s_last_alarm_id        = alarm_id;
-  s_last_alarm_source    = source;
-  s_last_alarm_detail    = detail;
-  s_default_alarm_called = 1U;
-  return APP_ALARM_RESULT_OK;
-}
-
-App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg,
-                                         App_AlarmId_t alarm_id,
-                                         App_ModuleId_t source,
-                                         App_ErrorCode_t error_code,
-                                         App_AlarmPayloadType_t payload_type,
-                                         const App_AlarmPayload_t *payload)
-{
-  (void)msg;
-  (void)alarm_id;
-  (void)source;
-  (void)error_code;
-  (void)payload_type;
-  (void)payload;
+  (void)memset(msg, 0, sizeof(*msg));
+  msg->header.op = op;
+  msg->header.source = source;
+  msg->header.severity = severity;
+  msg->header.code = code;
+  msg->header.instance_id = instance_id;
+  msg->header.payload_type = payload_type;
+  if (payload != 0)
+  {
+    msg->payload = *payload;
+  }
   return APP_ALARM_RESULT_OK;
 }
 
 BaseType_t App_AlarmPost(const App_AlarmMsg_t *msg, TickType_t timeout_ticks)
 {
-  (void)msg;
   (void)timeout_ticks;
+
+  if (msg == 0)
+  {
+    return pdFAIL;
+  }
+
+  if ((msg->header.source == APP_MODULE_LOGGER) && (msg->header.op == APP_ALARM_OP_RAISE))
+  {
+    s_last_alarm_msg = *msg;
+    s_alarm_posted = 1U;
+  }
+
   return pdPASS;
 }
 
-uint32_t App_AlarmGetActiveMask(void)
+uint16_t App_AlarmGetActiveCount(void)
 {
   return 0U;
 }
 
-App_ErrorCode_t App_AlarmGetCurrentError(void)
+App_AlarmResult_t App_AlarmGetRecord(uint16_t index, App_AlarmRecord_t *record)
 {
-  return APP_ERROR_OK;
+  (void)index;
+  (void)record;
+  return APP_ALARM_RESULT_NOT_FOUND;
+}
+
+App_ErrorCode_t App_AlarmGetCurrentCode(void)
+{
+  return ERR_OK;
+}
+
+App_AlarmSeverity_t App_AlarmGetCurrentSeverity(void)
+{
+  return APP_ALARM_SEVERITY_NORMAL;
 }
 
 void App_StorageInit(void)
@@ -121,11 +128,11 @@ Display_Result_t Display_Init(void)
   return DISPLAY_OK;
 }
 
-Display_Result_t Display_SelfCheck(App_ErrorCode_t *error_code)
+Display_Result_t Display_SelfCheck(App_ErrorCode_t *code)
 {
-  if (error_code != 0)
+  if (code != 0)
   {
-    *error_code = APP_ERROR_OK;
+    *code = ERR_OK;
   }
 
   return DISPLAY_OK;
@@ -160,12 +167,7 @@ Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list,
   return SENSOR_SEVERITY_NORMAL;
 }
 
-Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples,
-                                         uint16_t max_sample_count,
-                                         uint16_t *out_sample_count,
-                                         Sensor_Status_t *status_list,
-                                         uint16_t max_status_count,
-                                         uint16_t *out_status_count)
+Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples, uint16_t max_sample_count, uint16_t *out_sample_count, Sensor_Status_t *status_list, uint16_t max_status_count, uint16_t *out_status_count)
 {
   (void)samples;
   (void)max_sample_count;
@@ -200,17 +202,14 @@ int main(void)
 {
   int failures = 0;
 
-  failures += expect_true(App_RegistryInitAll() == APP_CHECK_ERROR,
-                          "logger init failure is reported");
-  failures += expect_true(s_last_alarm_id == APP_ALARM_LOG_STORAGE_FAILED,
-                          "logger init failure raises logger storage alarm");
-  failures += expect_true(s_last_alarm_source == APP_MODULE_LOGGER,
-                          "alarm source is logger");
-  failures += expect_true(s_default_alarm_called != 0U,
-                          "registry uses default alarm API without explicit error code");
-  failures += expect_true(s_explicit_alarm_called == 0U,
-                          "registry does not pass OK as explicit alarm error code");
-  failures += expect_true(s_last_alarm_detail == (uint32_t)APP_CHECK_ERROR,
+  failures += expect_true(App_RegistryInitAll() == APP_CHECK_CRITICAL,
+                          "logger init failure is critical");
+  failures += expect_true(s_alarm_posted != 0U, "logger init failure posts alarm message");
+  failures += expect_true(s_last_alarm_msg.header.op == APP_ALARM_OP_RAISE, "logger init failure is raise op");
+  failures += expect_true(s_last_alarm_msg.header.source == APP_MODULE_LOGGER, "alarm source is logger");
+  failures += expect_true(s_last_alarm_msg.header.code == ERR_LOG_WRITE_FAILED, "logger init failure uses logger error code");
+  failures += expect_true(s_last_alarm_msg.header.severity == APP_ALARM_SEVERITY_CRITICAL, "logger init failure severity is critical");
+  failures += expect_true(s_last_alarm_msg.payload.raw_detail == (uint32_t)APP_CHECK_CRITICAL,
                           "alarm detail carries check result");
 
   if (failures != 0)

@@ -1,4 +1,5 @@
 #include "app_alarm.h"
+
 #include "app_status.h"
 #include "queue.h"
 #include "task.h"
@@ -9,120 +10,82 @@
 
 #define APP_ALARM_QUEUE_LENGTH 8U
 #define APP_ALARM_TASK_PERIOD_MS 200U
+#define APP_ALARM_ACTIVE_MAX 16U
+#define APP_ALARM_SYSTEM_INSTANCE_ID 0U
+#define APP_ALARM_HOOK_MALLOC_FAILED 1U
+#define APP_ALARM_HOOK_STACK_OVERFLOW 2U
 
 /**
- * @brief 当前激活告警位图。
+ * @brief 活动异常记录表。
  *
- * 当 `APP_ALARM_xxx == N` 的告警处于激活状态时，第 N 位被置 1。
- * 该位图只作为运行时快速索引使用；HMI、日志和上报必须使用
- * `s_alarm_records[]` 中保存的标准错误码。
+ * 表内只保存当前仍处于激活状态的异常。记录唯一键为
+ * `source + code + instance_id`，用于区分不同模块、不同错误和不同设备实例。
  */
-static uint32_t s_alarm_mask;
+static App_AlarmRecord_t s_alarm_records[APP_ALARM_ACTIVE_MAX];
 
 /**
- * @brief 按 App_AlarmId_t 索引的运行时告警记录表。
+ * @brief 告警消息队列。
  *
- * 每个告警项固定对应一条记录。触发告警时更新记录内容并设置
- * `s_alarm_mask` 中的对应位；清除告警时只清除 active 标志和位图位，
- * 保留 count、detail 等历史信息用于后续诊断。
- */
-static App_AlarmRecord_t s_alarm_records[APP_ALARM_COUNT];
-
-/**
- * @brief 告警事件队列。
- *
- * 普通模块只向该队列投递 `App_AlarmMsg_t`，由告警任务统一消费并更新
- * `s_alarm_mask` 和 `s_alarm_records[]`。
+ * 普通模块统一构造 `App_AlarmMsg_t` 并投递到该队列，由告警任务集中更新
+ * 活动异常记录表。
  */
 static QueueHandle_t s_alarm_queue;
 
-static App_AlarmResult_t App_AlarmApplyRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
-static App_AlarmResult_t App_AlarmApplyClear(App_AlarmId_t alarm_id);
 static App_AlarmResult_t App_AlarmDispatchMsg(const App_AlarmMsg_t *msg);
-static App_ErrorCode_t App_AlarmGetDefaultError(App_AlarmId_t alarm_id);
-static App_AlarmSeverity_t App_AlarmGetDefaultSeverity(App_AlarmId_t alarm_id);
-static uint32_t App_AlarmGetPayloadDetail(App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
-static App_AlarmResult_t App_AlarmPostResult(BaseType_t post_result);
+static App_AlarmResult_t App_AlarmApplyRaise(const App_AlarmMsg_t *msg);
+static App_AlarmResult_t App_AlarmApplyClear(const App_AlarmMsg_t *msg);
+static void App_AlarmRecordDirect(App_ModuleId_t source, App_AlarmSeverity_t severity, App_ErrorCode_t code, uint16_t instance_id, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
+static int16_t App_AlarmFindKeyLocked(App_ModuleId_t source, App_ErrorCode_t code, uint16_t instance_id);
+static int16_t App_AlarmFindFreeLocked(void);
+static int16_t App_AlarmFindReplacementLocked(App_AlarmSeverity_t severity);
+static uint16_t App_AlarmCountActiveLocked(void);
+static uint8_t App_AlarmSourceHasActiveLocked(App_ModuleId_t source, App_ErrorCode_t *code, App_AlarmSeverity_t *severity);
+static void App_AlarmWriteRecordLocked(int16_t index, const App_AlarmMsg_t *msg, uint32_t now_ms, uint8_t is_new_record);
 static uint8_t App_AlarmIsValidPayload(App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload);
 static uint8_t App_AlarmIsValidMsg(const App_AlarmMsg_t *msg);
 
 /**
- * @brief 检查告警 ID 是否可作为记录索引和位图位号使用。
+ * @brief 初始化告警模块。
  *
- * @param alarm_id 待检查的告警 ID。
- * @retval 1U 告警 ID 有效。
- * @retval 0U 告警 ID 无效。
- */
-static uint8_t App_AlarmIsValidId(App_AlarmId_t alarm_id);
-
-/**
- * @brief 初始化告警模块运行时状态。
- *
- * 清空激活告警位图，并将所有告警记录复位为未激活状态。
- * 创建告警事件队列。后续普通告警入口只负责投递消息，由告警任务消费。
- * 在触发或查询任何告警前必须先调用本函数。
+ * 清空活动异常记录表并创建告警消息队列。后续普通异常必须通过
+ * `App_AlarmPost()` 进入队列，由告警任务统一消费。
  */
 void App_AlarmInit(void)
 {
-  uint32_t i;
-
-  s_alarm_mask = 0U;
-
-  for (i = 0U; i < (uint32_t)APP_ALARM_COUNT; i++)
-  {
-    s_alarm_records[i].alarm_id = (App_AlarmId_t)i;
-    s_alarm_records[i].source = APP_MODULE_SYSTEM;
-    s_alarm_records[i].error_code = APP_ERROR_OK;
-    s_alarm_records[i].severity = APP_ALARM_SEVERITY_NORMAL;
-    s_alarm_records[i].payload_type = APP_ALARM_PAYLOAD_NONE;
-    (void)memset(&s_alarm_records[i].payload, 0, sizeof(s_alarm_records[i].payload));
-    s_alarm_records[i].detail = 0U;
-    s_alarm_records[i].count = 0U;
-    s_alarm_records[i].active = 0U;
-  }
-
+  (void)memset(s_alarm_records, 0, sizeof(s_alarm_records));
   s_alarm_queue = xQueueCreate(APP_ALARM_QUEUE_LENGTH, sizeof(App_AlarmMsg_t));
 }
 
 /**
- * @brief 构造携带显式错误码的告警触发消息。
+ * @brief 构造统一异常状态变化消息。
  *
- * 所有普通告警事件都统一通过 `App_AlarmMsg_t` 进入队列。调用方可以
- * 使用本函数填充消息，避免手写消息头字段造成不一致。
+ * RAISE 表示异常进入或持续存在；CLEAR 表示指定异常键恢复。错误码放在消息头，
+ * payload 只保存现场上下文。
  *
- * @param msg 调用方提供的消息输出缓冲区。
- * @param alarm_id 要激活的内部告警项。
- * @param source 触发告警的模块。
- * @param error_code 标准对外错误码，不能为 `APP_ERROR_OK`。
+ * @param msg 输出消息缓冲区。
+ * @param op 状态变化类型。
+ * @param source 异常来源模块。
+ * @param severity 严重程度。
+ * @param code 统一错误码。
+ * @param instance_id 来源模块内的实例编号。
  * @param payload_type payload 类型。
- * @param payload payload 数据。`payload_type` 为 NONE 时可以为 NULL。
- * @retval APP_ALARM_RESULT_OK 消息已构造。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 参数无效。
+ * @param payload payload 数据，payload_type 为 NONE 时可为 NULL。
+ * @return 构造结果。
  */
-App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
+App_AlarmResult_t App_AlarmBuildMsg(App_AlarmMsg_t *msg, App_AlarmOp_t op, App_ModuleId_t source, App_AlarmSeverity_t severity, App_ErrorCode_t code, uint16_t instance_id, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
 {
   if (msg == NULL)
   {
     return APP_ALARM_RESULT_INVALID_PARAM;
   }
 
-  if (App_AlarmIsValidId(alarm_id) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_ID;
-  }
-
-  if ((error_code == APP_ERROR_OK) || (App_AlarmIsValidPayload(payload_type, payload) == 0U))
-  {
-    return APP_ALARM_RESULT_INVALID_PARAM;
-  }
-
   (void)memset(msg, 0, sizeof(*msg));
-  msg->header.msg_type = APP_ALARM_MSG_RAISE;
-  msg->header.alarm_id = alarm_id;
+  msg->header.op = op;
   msg->header.source = source;
-  msg->header.error_code = error_code;
+  msg->header.severity = severity;
+  msg->header.code = code;
   msg->header.payload_type = payload_type;
+  msg->header.instance_id = instance_id;
   msg->header.timestamp_ms = 0U;
 
   if (payload != NULL)
@@ -130,91 +93,51 @@ App_AlarmResult_t App_AlarmBuildRaiseMsg(App_AlarmMsg_t *msg, App_AlarmId_t alar
     msg->payload = *payload;
   }
 
-  return APP_ALARM_RESULT_OK;
-}
-
-/**
- * @brief 构造使用默认错误码的告警触发消息。
- *
- * 当调用方只能确定告警项、没有更具体标准错误码时使用本函数。
- * 默认错误码由告警模块内部表统一维护。
- *
- * @param msg 调用方提供的消息输出缓冲区。
- * @param alarm_id 要激活的内部告警项。
- * @param source 触发告警的模块。
- * @param payload_type payload 类型。
- * @param payload payload 数据。`payload_type` 为 NONE 时可以为 NULL。
- * @retval APP_ALARM_RESULT_OK 消息已构造。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 参数无效。
- */
-App_AlarmResult_t App_AlarmBuildRaiseDefaultMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
-{
-  if (App_AlarmIsValidId(alarm_id) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_ID;
-  }
-
-  return App_AlarmBuildRaiseMsg(msg, alarm_id, source, App_AlarmGetDefaultError(alarm_id), payload_type, payload);
-}
-
-/**
- * @brief 构造告警清除消息。
- *
- * @param msg 调用方提供的消息输出缓冲区。
- * @param alarm_id 要清除的内部告警项。
- * @param source 发起清除的模块。
- * @retval APP_ALARM_RESULT_OK 消息已构造。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 参数无效。
- */
-App_AlarmResult_t App_AlarmBuildClearMsg(App_AlarmMsg_t *msg, App_AlarmId_t alarm_id, App_ModuleId_t source)
-{
-  if (msg == NULL)
+  if (App_AlarmIsValidMsg(msg) == 0U)
   {
     return APP_ALARM_RESULT_INVALID_PARAM;
   }
 
-  if (App_AlarmIsValidId(alarm_id) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_ID;
-  }
-
-  (void)memset(msg, 0, sizeof(*msg));
-  msg->header.msg_type = APP_ALARM_MSG_CLEAR;
-  msg->header.alarm_id = alarm_id;
-  msg->header.source = source;
-  msg->header.error_code = APP_ERROR_OK;
-  msg->header.payload_type = APP_ALARM_PAYLOAD_NONE;
-  msg->header.timestamp_ms = 0U;
-
   return APP_ALARM_RESULT_OK;
 }
 
 /**
- * @brief 投递告警消息到告警队列。
+ * @brief 投递异常消息到告警队列。
  *
- * FreeRTOS 队列本身是线程安全的，本函数不额外加互斥锁。
+ * 队列满时返回 pdFAIL，并尝试直接记录系统级队列溢出异常。
  *
- * @param msg 待投递的告警消息。
+ * @param msg 待投递消息。
  * @param timeout_ticks 队列满时等待的 tick 数。
  * @retval pdPASS 投递成功。
  * @retval pdFAIL 投递失败。
  */
 BaseType_t App_AlarmPost(const App_AlarmMsg_t *msg, TickType_t timeout_ticks)
 {
+  BaseType_t result;
+
   if ((s_alarm_queue == NULL) || (App_AlarmIsValidMsg(msg) == 0U))
   {
     return pdFAIL;
   }
 
-  return xQueueSend(s_alarm_queue, msg, timeout_ticks);
+  result = xQueueSend(s_alarm_queue, msg, timeout_ticks);
+  if (result != pdPASS)
+  {
+    App_AlarmPayload_t payload;
+
+    (void)memset(&payload, 0, sizeof(payload));
+    payload.system.hook_code = ERR_SYSTEM_ALARM_QUEUE_FULL;
+    payload.system.detail = (uint32_t)msg->header.code;
+    App_AlarmRecordDirect(APP_MODULE_SYSTEM, APP_ALARM_SEVERITY_IMPORTANT, ERR_SYSTEM_ALARM_QUEUE_FULL, APP_ALARM_SYSTEM_INSTANCE_ID, APP_ALARM_PAYLOAD_SYSTEM, &payload);
+  }
+
+  return result;
 }
 
 /**
- * @brief 在中断上下文投递告警消息到告警队列。
+ * @brief 在中断上下文投递异常消息到告警队列。
  *
- * @param msg 待投递的告警消息。
+ * @param msg 待投递消息。
  * @param higher_priority_task_woken FreeRTOS 中断唤醒标志。
  * @retval pdPASS 投递成功。
  * @retval pdFAIL 投递失败。
@@ -227,287 +150,6 @@ BaseType_t App_AlarmPostFromISR(const App_AlarmMsg_t *msg, BaseType_t *higher_pr
   }
 
   return xQueueSendFromISR(s_alarm_queue, msg, higher_priority_task_woken);
-}
-
-/**
- * @brief 触发或更新一条告警记录。
- *
- * 告警 ID 用于内部状态管理和 active mask 位号索引。
- * 错误码是面向状态、HMI、日志和上报的稳定对外编码。
- * `APP_ERROR_OK` 只表示无错误，不能作为告警错误码传入。
- *
- * @param alarm_id 要激活的内部告警项。
- * @param source 触发告警的模块。
- * @param error_code 标准对外错误码。
- * @param detail 内部诊断细节，例如驱动错误、HAL 返回值或子状态。
- * @retval APP_ALARM_RESULT_OK 告警已记录。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无法表示。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 错误码无效。
- */
-App_AlarmResult_t App_AlarmRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, uint32_t detail)
-{
-  App_AlarmMsg_t msg;
-  App_AlarmPayload_t payload;
-  App_AlarmResult_t result;
-
-  payload.raw_detail = detail;
-  result = App_AlarmBuildRaiseMsg(&msg, alarm_id, source, error_code, APP_ALARM_PAYLOAD_RAW, &payload);
-  if (result != APP_ALARM_RESULT_OK)
-  {
-    return result;
-  }
-
-  return App_AlarmPostResult(App_AlarmPost(&msg, 0U));
-}
-
-/**
- * @brief 使用告警项默认错误码触发或更新一条告警记录。
- *
- * 当调用方只能确定告警项，但没有更具体的标准错误码时，使用本接口。
- * 默认错误码由告警模块内部表统一维护，避免调用方重复维护映射关系。
- *
- * @param alarm_id 要激活的内部告警项。
- * @param source 触发告警的模块。
- * @param detail 内部诊断细节，例如驱动错误、HAL 返回值或子状态。
- * @retval APP_ALARM_RESULT_OK 告警已记录。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无法表示。
- */
-App_AlarmResult_t App_AlarmRaiseDefault(App_AlarmId_t alarm_id, App_ModuleId_t source, uint32_t detail)
-{
-  App_AlarmMsg_t msg;
-  App_AlarmPayload_t payload;
-  App_AlarmResult_t result;
-
-  payload.raw_detail = detail;
-  result = App_AlarmBuildRaiseDefaultMsg(&msg, alarm_id, source, APP_ALARM_PAYLOAD_RAW, &payload);
-  if (result != APP_ALARM_RESULT_OK)
-  {
-    return result;
-  }
-
-  return App_AlarmPostResult(App_AlarmPost(&msg, 0U));
-}
-
-/**
- * @brief 立即写入告警记录。
- *
- * 本接口仅用于 malloc failed、stack overflow 等系统钩子。普通模块必须
- * 构造 `App_AlarmMsg_t` 并通过队列投递。
- *
- * @param alarm_id 要激活的内部告警项。
- * @param source 触发告警的模块。
- * @param error_code 标准对外错误码，不能为 `APP_ERROR_OK`。
- * @param detail 内部诊断细节。
- * @retval APP_ALARM_RESULT_OK 告警已记录。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 错误码无效。
- */
-App_AlarmResult_t App_AlarmRaiseImmediate(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, uint32_t detail)
-{
-  App_AlarmPayload_t payload;
-
-  if (App_AlarmIsValidId(alarm_id) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_ID;
-  }
-
-  if (error_code == APP_ERROR_OK)
-  {
-    return APP_ALARM_RESULT_INVALID_PARAM;
-  }
-
-  payload.raw_detail = detail;
-  return App_AlarmApplyRaise(alarm_id, source, error_code, APP_ALARM_PAYLOAD_RAW, &payload);
-}
-
-/**
- * @brief 写入告警记录并更新模块状态。
- *
- * 本函数假定告警 ID 和错误码已经由公开 API 校验或解析完成。
- *
- * @param alarm_id 要激活的内部告警项。
- * @param source 触发告警的模块。
- * @param error_code 标准对外错误码。
- * @param payload_type payload 类型。
- * @param payload payload 数据。
- * @retval APP_ALARM_RESULT_OK 告警已记录。
- */
-static App_AlarmResult_t App_AlarmApplyRaise(App_AlarmId_t alarm_id, App_ModuleId_t source, App_ErrorCode_t error_code, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
-{
-  App_AlarmRecord_t *record;
-  uint32_t detail;
-
-  detail = App_AlarmGetPayloadDetail(payload_type, payload);
-
-  taskENTER_CRITICAL();
-  record = &s_alarm_records[(uint32_t)alarm_id];
-  record->alarm_id = alarm_id;
-  record->source = source;
-  record->error_code = error_code;
-  record->severity = App_AlarmGetDefaultSeverity(alarm_id);
-  record->payload_type = payload_type;
-  (void)memset(&record->payload, 0, sizeof(record->payload));
-  if (payload != NULL)
-  {
-    record->payload = *payload;
-  }
-  record->detail = detail;
-  record->count++;
-  record->active = 1U;
-
-  s_alarm_mask |= (1UL << (uint32_t)alarm_id);
-  taskEXIT_CRITICAL();
-
-  App_StatusSet(source, APP_STATE_ERROR, error_code);
-
-  return APP_ALARM_RESULT_OK;
-}
-
-/**
- * @brief 清除告警记录的激活状态。
- *
- * @param alarm_id 要清除的内部告警项。
- * @retval APP_ALARM_RESULT_OK 告警激活状态已清除。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
- */
-static App_AlarmResult_t App_AlarmApplyClear(App_AlarmId_t alarm_id)
-{
-  if (App_AlarmIsValidId(alarm_id) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_ID;
-  }
-
-  taskENTER_CRITICAL();
-  s_alarm_mask &= ~(1UL << (uint32_t)alarm_id);
-  s_alarm_records[(uint32_t)alarm_id].active = 0U;
-  taskEXIT_CRITICAL();
-
-  return APP_ALARM_RESULT_OK;
-}
-
-/**
- * @brief 分发并应用一条告警消息。
- *
- * @param msg 已从队列取出的告警消息。
- * @retval APP_ALARM_RESULT_OK 消息已处理。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 消息无效。
- */
-static App_AlarmResult_t App_AlarmDispatchMsg(const App_AlarmMsg_t *msg)
-{
-  if (App_AlarmIsValidMsg(msg) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_PARAM;
-  }
-
-  switch (msg->header.msg_type)
-  {
-  case APP_ALARM_MSG_RAISE:
-    return App_AlarmApplyRaise(msg->header.alarm_id, msg->header.source, msg->header.error_code, msg->header.payload_type, &msg->payload);
-  case APP_ALARM_MSG_CLEAR:
-    return App_AlarmApplyClear(msg->header.alarm_id);
-  default:
-    return APP_ALARM_RESULT_INVALID_PARAM;
-  }
-}
-
-/**
- * @brief 清除一个激活告警项。
- *
- * 普通清除请求会先进入告警队列，实际 active mask 和记录状态由告警任务
- * 统一更新。count、detail 等历史字段在清除后仍保留。
- *
- * @param alarm_id 要清除的内部告警项。
- * @retval APP_ALARM_RESULT_OK 告警激活状态已清除。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无法表示。
- */
-App_AlarmResult_t App_AlarmClear(App_AlarmId_t alarm_id)
-{
-  App_AlarmMsg_t msg;
-  App_AlarmResult_t result = App_AlarmBuildClearMsg(&msg, alarm_id, APP_MODULE_ALARM);
-
-  if (result != APP_ALARM_RESULT_OK)
-  {
-    return result;
-  }
-
-  return App_AlarmPostResult(App_AlarmPost(&msg, 0U));
-}
-
-/**
- * @brief 获取当前激活告警位图。
- *
- * @return 告警位图，第 N 位表示告警 ID N 是否处于激活状态。
- */
-uint32_t App_AlarmGetActiveMask(void)
-{
-  uint32_t active_mask;
-
-  taskENTER_CRITICAL();
-  active_mask = s_alarm_mask;
-  taskEXIT_CRITICAL();
-
-  return active_mask;
-}
-
-/**
- * @brief 获取指定告警项的运行时记录副本。
- *
- * @param alarm_id 要查询的告警 ID。
- * @param record 调用方提供的记录输出缓冲区。
- * @retval APP_ALARM_RESULT_OK 记录已复制到输出缓冲区。
- * @retval APP_ALARM_RESULT_INVALID_ID 告警 ID 无效。
- * @retval APP_ALARM_RESULT_INVALID_PARAM 输出缓冲区为空。
- */
-App_AlarmResult_t App_AlarmGetRecord(App_AlarmId_t alarm_id, App_AlarmRecord_t *record)
-{
-  if (record == 0)
-  {
-    return APP_ALARM_RESULT_INVALID_PARAM;
-  }
-
-  if (App_AlarmIsValidId(alarm_id) == 0U)
-  {
-    return APP_ALARM_RESULT_INVALID_ID;
-  }
-
-  taskENTER_CRITICAL();
-  *record = s_alarm_records[(uint32_t)alarm_id];
-  taskEXIT_CRITICAL();
-
-  return APP_ALARM_RESULT_OK;
-}
-
-/**
- * @brief 从当前激活告警中选择一个对外错误码。
- *
- * 当前错误码按告警等级从激活记录中选择。多个激活告警等级相同时，
- * 因扫描条件使用 `>=`，编号靠后的告警会覆盖前一个结果。
- * 这样在 HMI/日志策略尚未复杂化前，仍能保持确定性。
- *
- * @return 当前优先级最高的标准错误码；无激活告警时返回 APP_ERROR_OK。
- */
-App_ErrorCode_t App_AlarmGetCurrentError(void)
-{
-  App_AlarmSeverity_t highest_severity = APP_ALARM_SEVERITY_NORMAL;
-  App_ErrorCode_t current_error = APP_ERROR_OK;
-  uint32_t i;
-
-  for (i = 1U; i < (uint32_t)APP_ALARM_COUNT; i++)
-  {
-    App_AlarmRecord_t record;
-
-    taskENTER_CRITICAL();
-    record = s_alarm_records[i];
-    taskEXIT_CRITICAL();
-
-    if ((record.active != 0U) && (record.severity >= highest_severity))
-    {
-      highest_severity = record.severity;
-      current_error = record.error_code;
-    }
-  }
-
-  return current_error;
 }
 
 /**
@@ -538,14 +180,14 @@ uint32_t App_AlarmProcessPending(uint32_t max_messages)
 /**
  * @brief 告警任务入口。
  *
- * 周期性消费告警队列，并维护告警模块心跳。
+ * 周期性消费异常消息队列，并维护告警模块心跳。
  *
  * @param argument FreeRTOS 任务参数，当前未使用。
  */
 void App_AlarmTask(void *argument)
 {
   (void)argument;
-  App_StatusSet(APP_MODULE_ALARM, APP_STATE_OK, APP_ERROR_OK);
+  App_StatusSet(APP_MODULE_ALARM, APP_STATE_OK, ERR_OK);
 
   /***************DEBUG***************/
   DBG_TRACE_TASK_STARTED("alarm");
@@ -560,128 +202,455 @@ void App_AlarmTask(void *argument)
 }
 
 /**
- * @brief 获取告警项默认对应的标准错误码。
+ * @brief 获取当前活动异常数量。
  *
- * @param alarm_id 内部告警项。
- * @return 告警项对应的标准对外错误码。
+ * @return 当前 active 记录数量。
  */
-static App_ErrorCode_t App_AlarmGetDefaultError(App_AlarmId_t alarm_id)
+uint16_t App_AlarmGetActiveCount(void)
 {
-  switch (alarm_id)
-  {
-  case APP_ALARM_HMI_OFFLINE:
-    return APP_ERROR_HMI_OFFLINE;
-  case APP_ALARM_GNSS_OFFLINE:
-    return APP_ERROR_GNSS_OFFLINE;
-  case APP_ALARM_GNSS_NO_FIX:
-    return APP_ERROR_GNSS_NO_FIX;
-  case APP_ALARM_SENSOR_FAULT:
-    return APP_ERROR_SENSOR_I2C;
-  case APP_ALARM_LORA_OFFLINE:
-    return APP_ERROR_LORA_OFFLINE;
-  case APP_ALARM_STORAGE_FAILED:
-  case APP_ALARM_LOG_STORAGE_FAILED:
-    return APP_ERROR_SD_MOUNT;
-  case APP_ALARM_POWER_LOW:
-    return APP_ERROR_POWER_LOW;
-  case APP_ALARM_MOTOR_FAULT:
-    return APP_ERROR_MOTOR_FAULT;
-  case APP_ALARM_HEAP_FAILED:
-    return APP_ERROR_HEAP_FAILED;
-  case APP_ALARM_STACK_OVERFLOW:
-    return APP_ERROR_STACK_OVERFLOW;
-  case APP_ALARM_SELF_CHECK_FAILED:
-    return APP_ERROR_SELF_CHECK_FAILED;
-  case APP_ALARM_NONE:
-  case APP_ALARM_COUNT:
-  default:
-    return APP_ERROR_UNKNOWN;
-  }
+  uint16_t count;
+
+  taskENTER_CRITICAL();
+  count = App_AlarmCountActiveLocked();
+  taskEXIT_CRITICAL();
+
+  return count;
 }
 
 /**
- * @brief 获取告警项默认等级。
+ * @brief 按活动记录序号获取记录副本。
  *
- * @param alarm_id 内部告警项。
- * @return 触发该告警时默认使用的告警等级。
+ * index 只针对 active 记录计数，不是内部数组物理下标。
+ *
+ * @param index 活动记录序号。
+ * @param record 输出记录副本。
+ * @return 查询结果。
  */
-static App_AlarmSeverity_t App_AlarmGetDefaultSeverity(App_AlarmId_t alarm_id)
+App_AlarmResult_t App_AlarmGetRecord(uint16_t index, App_AlarmRecord_t *record)
 {
-  switch (alarm_id)
+  uint16_t active_index = 0U;
+  uint16_t i;
+
+  if (record == NULL)
   {
-  case APP_ALARM_POWER_LOW:
-  case APP_ALARM_LORA_OFFLINE:
-  case APP_ALARM_STORAGE_FAILED:
-  case APP_ALARM_LOG_STORAGE_FAILED:
-    return APP_ALARM_SEVERITY_IMPORTANT;
-  case APP_ALARM_HEAP_FAILED:
-  case APP_ALARM_STACK_OVERFLOW:
-  case APP_ALARM_MOTOR_FAULT:
-    return APP_ALARM_SEVERITY_CRITICAL;
-  case APP_ALARM_HMI_OFFLINE:
-  case APP_ALARM_GNSS_OFFLINE:
-  case APP_ALARM_GNSS_NO_FIX:
-  case APP_ALARM_SENSOR_FAULT:
-  case APP_ALARM_SELF_CHECK_FAILED:
-    return APP_ALARM_SEVERITY_GENERAL;
-  case APP_ALARM_NONE:
-  case APP_ALARM_COUNT:
-  default:
-    return APP_ALARM_SEVERITY_NORMAL;
+    return APP_ALARM_RESULT_INVALID_PARAM;
   }
+
+  taskENTER_CRITICAL();
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if (s_alarm_records[i].active != 0U)
+    {
+      if (active_index == index)
+      {
+        *record = s_alarm_records[i];
+        taskEXIT_CRITICAL();
+        return APP_ALARM_RESULT_OK;
+      }
+
+      active_index++;
+    }
+  }
+  taskEXIT_CRITICAL();
+
+  return APP_ALARM_RESULT_NOT_FOUND;
 }
 
 /**
- * @brief 从 payload 中提取兼容旧记录字段的 detail。
+ * @brief 按来源模块和实例编号查找活动异常。
  *
- * @param payload_type payload 类型。
- * @param payload payload 数据。
- * @return 可用于日志和诊断的简化 detail。
+ * @param source 来源模块。
+ * @param instance_id 实例编号。
+ * @param records 输出记录数组。
+ * @param max_count 输出数组容量。
+ * @return 实际写入的记录数量。
  */
-static uint32_t App_AlarmGetPayloadDetail(App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
+uint16_t App_AlarmFindBySourceInstance(App_ModuleId_t source, uint16_t instance_id, App_AlarmRecord_t *records, uint16_t max_count)
 {
-  if (payload == NULL)
+  uint16_t count = 0U;
+  uint16_t i;
+
+  if ((records == NULL) || (max_count == 0U))
   {
     return 0U;
   }
 
-  switch (payload_type)
+  taskENTER_CRITICAL();
+  for (i = 0U; (i < APP_ALARM_ACTIVE_MAX) && (count < max_count); i++)
   {
-  case APP_ALARM_PAYLOAD_RAW:
-    return payload->raw_detail;
-  case APP_ALARM_PAYLOAD_SENSOR:
-    return payload->sensor.driver_error;
-  case APP_ALARM_PAYLOAD_COMM:
-    return payload->comm.link_error;
-  case APP_ALARM_PAYLOAD_STORAGE:
-    return payload->storage.storage_error;
-  case APP_ALARM_PAYLOAD_SYSTEM:
-    return payload->system.hook_code;
-  case APP_ALARM_PAYLOAD_NONE:
-  default:
-    return 0U;
+    if ((s_alarm_records[i].active != 0U) &&
+        (s_alarm_records[i].source == source) &&
+        (s_alarm_records[i].instance_id == instance_id))
+    {
+      records[count] = s_alarm_records[i];
+      count++;
+    }
   }
+  taskEXIT_CRITICAL();
+
+  return count;
 }
 
 /**
- * @brief 将队列投递结果转换为告警 API 结果。
+ * @brief 获取当前最高优先级错误码。
  *
- * @param post_result FreeRTOS 队列投递结果。
- * @retval APP_ALARM_RESULT_OK 投递成功。
- * @retval APP_ALARM_RESULT_QUEUE_FAILED 投递失败。
+ * @return 无活动异常时返回 ERR_OK，否则返回最高严重程度记录的错误码。
  */
-static App_AlarmResult_t App_AlarmPostResult(BaseType_t post_result)
+App_ErrorCode_t App_AlarmGetCurrentCode(void)
 {
-  return (post_result == pdPASS) ? APP_ALARM_RESULT_OK : APP_ALARM_RESULT_QUEUE_FAILED;
+  App_AlarmSeverity_t highest_severity = APP_ALARM_SEVERITY_NORMAL;
+  App_ErrorCode_t current_code = ERR_OK;
+  uint16_t i;
+
+  taskENTER_CRITICAL();
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if ((s_alarm_records[i].active != 0U) && (s_alarm_records[i].severity >= highest_severity))
+    {
+      highest_severity = s_alarm_records[i].severity;
+      current_code = s_alarm_records[i].code;
+    }
+  }
+  taskEXIT_CRITICAL();
+
+  return current_code;
+}
+
+/**
+ * @brief 获取当前最高异常严重程度。
+ *
+ * @return 无活动异常时返回 APP_ALARM_SEVERITY_NORMAL。
+ */
+App_AlarmSeverity_t App_AlarmGetCurrentSeverity(void)
+{
+  App_AlarmSeverity_t highest_severity = APP_ALARM_SEVERITY_NORMAL;
+  uint16_t i;
+
+  taskENTER_CRITICAL();
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if ((s_alarm_records[i].active != 0U) && (s_alarm_records[i].severity >= highest_severity))
+    {
+      highest_severity = s_alarm_records[i].severity;
+    }
+  }
+  taskEXIT_CRITICAL();
+
+  return highest_severity;
+}
+
+/**
+ * @brief 分发并应用一条异常消息。
+ *
+ * @param msg 已从队列取出的消息。
+ * @return 处理结果。
+ */
+static App_AlarmResult_t App_AlarmDispatchMsg(const App_AlarmMsg_t *msg)
+{
+  if (App_AlarmIsValidMsg(msg) == 0U)
+  {
+    return APP_ALARM_RESULT_INVALID_PARAM;
+  }
+
+  if (msg->header.op == APP_ALARM_OP_RAISE)
+  {
+    return App_AlarmApplyRaise(msg);
+  }
+
+  return App_AlarmApplyClear(msg);
+}
+
+/**
+ * @brief 写入或刷新活动异常。
+ *
+ * @param msg RAISE 消息。
+ * @return 写入结果。
+ */
+static App_AlarmResult_t App_AlarmApplyRaise(const App_AlarmMsg_t *msg)
+{
+  App_AlarmResult_t result = APP_ALARM_RESULT_OK;
+  int16_t index;
+  uint32_t now_ms;
+
+  now_ms = (msg->header.timestamp_ms != 0U) ? msg->header.timestamp_ms : (uint32_t)xTaskGetTickCount();
+
+  taskENTER_CRITICAL();
+  index = App_AlarmFindKeyLocked(msg->header.source, msg->header.code, msg->header.instance_id);
+  if (index >= 0)
+  {
+    App_AlarmWriteRecordLocked(index, msg, now_ms, 0U);
+  }
+  else
+  {
+    index = App_AlarmFindFreeLocked();
+    if (index < 0)
+    {
+      index = App_AlarmFindReplacementLocked(msg->header.severity);
+    }
+
+    if (index >= 0)
+    {
+      App_AlarmWriteRecordLocked(index, msg, now_ms, 1U);
+    }
+    else
+    {
+      result = APP_ALARM_RESULT_NO_SLOT;
+    }
+  }
+  taskEXIT_CRITICAL();
+
+  if (result == APP_ALARM_RESULT_OK)
+  {
+    App_StatusSet(msg->header.source, APP_STATE_ERROR, msg->header.code);
+  }
+  else if (msg->header.code != ERR_SYSTEM_ALARM_RECORD_FULL)
+  {
+    App_AlarmPayload_t payload;
+
+    (void)memset(&payload, 0, sizeof(payload));
+    payload.system.hook_code = ERR_SYSTEM_ALARM_RECORD_FULL;
+    payload.system.detail = (uint32_t)msg->header.code;
+    App_AlarmRecordDirect(APP_MODULE_SYSTEM, APP_ALARM_SEVERITY_CRITICAL, ERR_SYSTEM_ALARM_RECORD_FULL, APP_ALARM_SYSTEM_INSTANCE_ID, APP_ALARM_PAYLOAD_SYSTEM, &payload);
+  }
+
+  return result;
+}
+
+/**
+ * @brief 清除活动异常。
+ *
+ * @param msg CLEAR 消息。
+ * @return 清除结果。
+ */
+static App_AlarmResult_t App_AlarmApplyClear(const App_AlarmMsg_t *msg)
+{
+  App_ErrorCode_t source_code = ERR_OK;
+  App_AlarmSeverity_t source_severity = APP_ALARM_SEVERITY_NORMAL;
+  App_AlarmResult_t result = APP_ALARM_RESULT_NOT_FOUND;
+  uint8_t has_source_active;
+  int16_t index;
+
+  taskENTER_CRITICAL();
+  index = App_AlarmFindKeyLocked(msg->header.source, msg->header.code, msg->header.instance_id);
+  if (index >= 0)
+  {
+    (void)memset(&s_alarm_records[index], 0, sizeof(s_alarm_records[index]));
+    result = APP_ALARM_RESULT_OK;
+  }
+
+  has_source_active = App_AlarmSourceHasActiveLocked(msg->header.source, &source_code, &source_severity);
+  taskEXIT_CRITICAL();
+
+  if (result == APP_ALARM_RESULT_OK)
+  {
+    if (has_source_active != 0U)
+    {
+      App_StatusSet(msg->header.source, APP_STATE_ERROR, source_code);
+    }
+    else
+    {
+      (void)source_severity;
+      App_StatusSet(msg->header.source, APP_STATE_OK, ERR_OK);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * @brief 直接写入系统级异常记录。
+ *
+ * 该函数只用于系统 hook 或队列/记录表溢出等异常路径，不作为普通模块 API。
+ */
+static void App_AlarmRecordDirect(App_ModuleId_t source, App_AlarmSeverity_t severity, App_ErrorCode_t code, uint16_t instance_id, App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
+{
+  App_AlarmMsg_t msg;
+  int16_t index;
+  uint32_t now_ms = (uint32_t)xTaskGetTickCount();
+
+  (void)memset(&msg, 0, sizeof(msg));
+  msg.header.op = APP_ALARM_OP_RAISE;
+  msg.header.source = source;
+  msg.header.severity = severity;
+  msg.header.code = code;
+  msg.header.instance_id = instance_id;
+  msg.header.payload_type = payload_type;
+  msg.header.timestamp_ms = now_ms;
+  if (payload != NULL)
+  {
+    msg.payload = *payload;
+  }
+
+  taskENTER_CRITICAL();
+  index = App_AlarmFindKeyLocked(source, code, instance_id);
+  if (index < 0)
+  {
+    index = App_AlarmFindFreeLocked();
+  }
+  if (index < 0)
+  {
+    index = App_AlarmFindReplacementLocked(severity);
+  }
+  if (index >= 0)
+  {
+    App_AlarmWriteRecordLocked(index, &msg, now_ms, (s_alarm_records[index].active == 0U) ? 1U : 0U);
+  }
+  taskEXIT_CRITICAL();
+
+  App_StatusSet(source, APP_STATE_ERROR, code);
+}
+
+/**
+ * @brief 在活动表中查找指定异常键。
+ */
+static int16_t App_AlarmFindKeyLocked(App_ModuleId_t source, App_ErrorCode_t code, uint16_t instance_id)
+{
+  uint16_t i;
+
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if ((s_alarm_records[i].active != 0U) &&
+        (s_alarm_records[i].source == source) &&
+        (s_alarm_records[i].code == code) &&
+        (s_alarm_records[i].instance_id == instance_id))
+    {
+      return (int16_t)i;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * @brief 查找空闲记录槽。
+ */
+static int16_t App_AlarmFindFreeLocked(void)
+{
+  uint16_t i;
+
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if (s_alarm_records[i].active == 0U)
+    {
+      return (int16_t)i;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * @brief 表满时查找可被更严重异常替换的记录。
+ */
+static int16_t App_AlarmFindReplacementLocked(App_AlarmSeverity_t severity)
+{
+  App_AlarmSeverity_t lowest_severity = APP_ALARM_SEVERITY_CRITICAL;
+  int16_t lowest_index = -1;
+  uint16_t i;
+
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if (s_alarm_records[i].severity <= lowest_severity)
+    {
+      lowest_severity = s_alarm_records[i].severity;
+      lowest_index = (int16_t)i;
+    }
+  }
+
+  if ((lowest_index >= 0) && (severity > lowest_severity))
+  {
+    return lowest_index;
+  }
+
+  return -1;
+}
+
+/**
+ * @brief 统计活动记录数量。
+ */
+static uint16_t App_AlarmCountActiveLocked(void)
+{
+  uint16_t count = 0U;
+  uint16_t i;
+
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if (s_alarm_records[i].active != 0U)
+    {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+/**
+ * @brief 查询来源模块是否仍有活动异常。
+ */
+static uint8_t App_AlarmSourceHasActiveLocked(App_ModuleId_t source, App_ErrorCode_t *code, App_AlarmSeverity_t *severity)
+{
+  App_AlarmSeverity_t highest_severity = APP_ALARM_SEVERITY_NORMAL;
+  App_ErrorCode_t current_code = ERR_OK;
+  uint8_t found = 0U;
+  uint16_t i;
+
+  for (i = 0U; i < APP_ALARM_ACTIVE_MAX; i++)
+  {
+    if ((s_alarm_records[i].active != 0U) &&
+        (s_alarm_records[i].source == source) &&
+        (s_alarm_records[i].severity >= highest_severity))
+    {
+      highest_severity = s_alarm_records[i].severity;
+      current_code = s_alarm_records[i].code;
+      found = 1U;
+    }
+  }
+
+  if (code != NULL)
+  {
+    *code = current_code;
+  }
+  if (severity != NULL)
+  {
+    *severity = highest_severity;
+  }
+
+  return found;
+}
+
+/**
+ * @brief 写入活动记录槽。
+ */
+static void App_AlarmWriteRecordLocked(int16_t index, const App_AlarmMsg_t *msg, uint32_t now_ms, uint8_t is_new_record)
+{
+  App_AlarmRecord_t *record = &s_alarm_records[index];
+
+  if (is_new_record != 0U)
+  {
+    (void)memset(record, 0, sizeof(*record));
+    record->first_tick_ms = now_ms;
+  }
+  else if (record->first_tick_ms == 0U)
+  {
+    record->first_tick_ms = now_ms;
+  }
+
+  record->active = 1U;
+  record->source = msg->header.source;
+  record->severity = msg->header.severity;
+  record->code = msg->header.code;
+  record->payload_type = msg->header.payload_type;
+  record->instance_id = msg->header.instance_id;
+  record->last_tick_ms = now_ms;
+  (void)memset(&record->payload, 0, sizeof(record->payload));
+  if (msg->header.payload_type != APP_ALARM_PAYLOAD_NONE)
+  {
+    record->payload = msg->payload;
+  }
 }
 
 /**
  * @brief 校验 payload 类型和数据指针是否匹配。
- *
- * @param payload_type payload 类型。
- * @param payload payload 数据。
- * @retval 1U payload 有效。
- * @retval 0U payload 无效。
  */
 static uint8_t App_AlarmIsValidPayload(App_AlarmPayloadType_t payload_type, const App_AlarmPayload_t *payload)
 {
@@ -689,11 +658,11 @@ static uint8_t App_AlarmIsValidPayload(App_AlarmPayloadType_t payload_type, cons
   {
   case APP_ALARM_PAYLOAD_NONE:
     return 1U;
-  case APP_ALARM_PAYLOAD_RAW:
   case APP_ALARM_PAYLOAD_SENSOR:
   case APP_ALARM_PAYLOAD_COMM:
   case APP_ALARM_PAYLOAD_STORAGE:
   case APP_ALARM_PAYLOAD_SYSTEM:
+  case APP_ALARM_PAYLOAD_RAW:
     return (payload != NULL) ? 1U : 0U;
   default:
     return 0U;
@@ -701,24 +670,24 @@ static uint8_t App_AlarmIsValidPayload(App_AlarmPayloadType_t payload_type, cons
 }
 
 /**
- * @brief 校验告警消息是否可投递或消费。
- *
- * @param msg 告警消息。
- * @retval 1U 消息有效。
- * @retval 0U 消息无效。
+ * @brief 校验异常消息是否可投递或消费。
  */
 static uint8_t App_AlarmIsValidMsg(const App_AlarmMsg_t *msg)
 {
-  if ((msg == NULL) || (App_AlarmIsValidId(msg->header.alarm_id) == 0U))
+  if ((msg == NULL) || (msg->header.source >= APP_MODULE_COUNT) || (msg->header.code == ERR_OK))
   {
     return 0U;
   }
 
-  switch (msg->header.msg_type)
+  switch (msg->header.op)
   {
-  case APP_ALARM_MSG_RAISE:
-    return (msg->header.error_code != APP_ERROR_OK) ? App_AlarmIsValidPayload(msg->header.payload_type, &msg->payload) : 0U;
-  case APP_ALARM_MSG_CLEAR:
+  case APP_ALARM_OP_RAISE:
+    if (msg->header.severity == APP_ALARM_SEVERITY_NORMAL)
+    {
+      return 0U;
+    }
+    return App_AlarmIsValidPayload(msg->header.payload_type, &msg->payload);
+  case APP_ALARM_OP_CLEAR:
     return 1U;
   default:
     return 0U;
@@ -726,16 +695,42 @@ static uint8_t App_AlarmIsValidMsg(const App_AlarmMsg_t *msg)
 }
 
 /**
- * @brief 校验告警 ID 是否可用于位图和记录表访问。
+ * @brief FreeRTOS 动态内存申请失败钩子。
  *
- * `APP_ALARM_NONE` 不是可触发告警。当前 active mask 为 32 位，
- * 因此在位图存储方式调整前，告警 ID 必须小于 32。
- *
- * @param alarm_id 待校验的告警 ID。
- * @retval 1U 告警 ID 有效。
- * @retval 0U 告警 ID 无效。
+ * 触发后直接写入系统级异常记录并关闭中断。
  */
-static uint8_t App_AlarmIsValidId(App_AlarmId_t alarm_id)
+void vApplicationMallocFailedHook(void)
 {
-  return ((alarm_id > APP_ALARM_NONE) && (alarm_id < APP_ALARM_COUNT) && ((uint32_t)alarm_id < 32U)) ? 1U : 0U;
+  App_AlarmPayload_t payload;
+
+  (void)memset(&payload, 0, sizeof(payload));
+  payload.system.hook_code = APP_ALARM_HOOK_MALLOC_FAILED;
+  App_AlarmRecordDirect(APP_MODULE_SYSTEM, APP_ALARM_SEVERITY_CRITICAL, ERR_SYSTEM_HEAP_FAILED, APP_ALARM_SYSTEM_INSTANCE_ID, APP_ALARM_PAYLOAD_SYSTEM, &payload);
+  taskDISABLE_INTERRUPTS();
+  for (;;)
+  {
+  }
+}
+
+/**
+ * @brief FreeRTOS 任务栈溢出钩子。
+ *
+ * 触发后直接写入系统级异常记录并关闭中断。
+ *
+ * @param task 发生栈溢出的任务句柄。
+ * @param task_name 发生栈溢出的任务名称。
+ */
+void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name)
+{
+  App_AlarmPayload_t payload;
+
+  (void)task_name;
+  (void)memset(&payload, 0, sizeof(payload));
+  payload.system.hook_code = APP_ALARM_HOOK_STACK_OVERFLOW;
+  payload.system.task_id = (uint32_t)(uintptr_t)task;
+  App_AlarmRecordDirect(APP_MODULE_SYSTEM, APP_ALARM_SEVERITY_CRITICAL, ERR_SYSTEM_STACK_OVERFLOW, APP_ALARM_SYSTEM_INSTANCE_ID, APP_ALARM_PAYLOAD_SYSTEM, &payload);
+  taskDISABLE_INTERRUPTS();
+  for (;;)
+  {
+  }
 }

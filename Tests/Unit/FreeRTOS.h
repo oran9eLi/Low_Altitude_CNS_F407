@@ -37,4 +37,8 @@ typedef unsigned int TickType_t;
 #define taskEXIT_CRITICAL() do { } while (0)
 #endif
 
+#ifndef taskDISABLE_INTERRUPTS
+#define taskDISABLE_INTERRUPTS() do { } while (0)
+#endif
+
 #endif

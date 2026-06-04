@@ -6,12 +6,11 @@
 #include "app_error.h"
 #include "app_status.h"
 
-// 自检结果定义
 typedef enum {
-  APP_CHECK_OK = 0,
-  APP_CHECK_WARNING,
-  APP_CHECK_NOT_READY,
-  APP_CHECK_ERROR
+  APP_CHECK_NORMAL = 0,
+  APP_CHECK_GENERAL,
+  APP_CHECK_IMPORTANT,
+  APP_CHECK_CRITICAL
 } App_CheckResult_t;
 
 typedef App_CheckResult_t (*App_ModuleInitFn)(void);
