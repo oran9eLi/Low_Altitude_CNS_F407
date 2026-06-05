@@ -54,10 +54,51 @@ static void Sensor_RegistryInitStatus(const Sensor_Driver_t *driver, Sensor_Stat
   }
 
   status->device_id    = (driver != NULL) ? driver->device_id : 0U;
-  status->sensor_type  = (driver != NULL) ? driver->sensor_type : SENSOR_TYPE_UNKNOWN;
   status->severity     = SENSOR_SEVERITY_NORMAL;
   status->code         = ERR_OK;
   status->driver_error = 0U;
+}
+
+/**
+ * @brief 归一化并收集单条传感器异常状态。
+ *
+ * 将驱动返回的严重程度与状态结构中的严重程度合并，异常但缺少错误码
+ * 时自动填入 ERR_SENSOR_DATA_INVALID，非 NORMAL 的状态写入
+ * status_list 并更新异常计数。
+ *
+ * @param[in,out] result 累计最严重程度。
+ * @param[out] status_list 异常状态输出数组，可以为 NULL。
+ * @param[in] max_count status_list 容量上限。
+ * @param[in,out] abnormal_count 当前异常计数，收集成功后递增。
+ * @param[in] status 驱动输出的传感器状态。
+ * @param[in] driver_result 驱动回调返回值。
+ */
+static void Sensor_RegistryCollectStatus(Sensor_Severity_t *result,
+                                         Sensor_Status_t *status_list,
+                                         uint16_t max_count,
+                                         uint16_t *abnormal_count,
+                                         const Sensor_Status_t *status,
+                                         Sensor_Severity_t driver_result)
+{
+  Sensor_Status_t merged = *status;
+
+  if (merged.severity < driver_result) {
+    merged.severity = driver_result;
+  }
+
+  if ((merged.severity != SENSOR_SEVERITY_NORMAL) && (merged.code == ERR_OK)) {
+    merged.code = ERR_SENSOR_DATA_INVALID;
+  }
+
+  if (merged.severity != SENSOR_SEVERITY_NORMAL) {
+    *result = Sensor_RegistryWorst(*result, merged.severity);
+
+    if ((status_list != NULL) && (*abnormal_count < max_count)) {
+      status_list[*abnormal_count] = merged;
+    }
+
+    (*abnormal_count)++;
+  }
 }
 
 /**
@@ -109,34 +150,6 @@ Sensor_Severity_t Sensor_RegistryInitAll(void)
 }
 
 /**
- * @brief 对所有已注册的传感器驱动执行自检。
- *
- * 句柄为 NULL 或 self_check 回调为 NULL 的驱动会被跳过。
- * @return 所有已注册驱动自检通过时返回 SENSOR_SEVERITY_NORMAL；
- * 否则返回驱动上报的最严重程度。
- */
-Sensor_Severity_t Sensor_RegistrySelfCheckAll(void)
-{
-  Sensor_Severity_t result = SENSOR_SEVERITY_NORMAL;
-  uint16_t i;
-
-  for (i = 0U; i < SENSOR_REGISTRY_SLOT_COUNT; i++) {
-    const Sensor_Driver_t *driver = s_sensor_drivers[i];
-
-    if ((driver != NULL) && (driver->self_check != NULL)) {
-      Sensor_Status_t status;
-      Sensor_Severity_t driver_result;
-
-      Sensor_RegistryInitStatus(driver, &status);
-      driver_result = driver->self_check(&status);
-      result = Sensor_RegistryWorst(result, Sensor_RegistryWorst(status.severity, driver_result));
-    }
-  }
-
-  return result;
-}
-
-/**
  * @brief 对所有已注册传感器执行自检，并输出异常传感器明细。
  *
  * 本接口只把非 SENSOR_SEVERITY_NORMAL 的传感器写入 status_list。
@@ -150,7 +163,7 @@ Sensor_Severity_t Sensor_RegistrySelfCheckAll(void)
  * 缓冲区无效时返回 SENSOR_SEVERITY_IMPORTANT；
  * 其他情况返回所有异常中的最严重程度。
  */
-Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
+Sensor_Severity_t Sensor_RegistrySelfCheckAll(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
 {
   Sensor_Severity_t result = SENSOR_SEVERITY_NORMAL;
   uint16_t abnormal_count     = 0U;
@@ -174,19 +187,7 @@ Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list,
       Sensor_RegistryInitStatus(driver, &status);
       driver_result = driver->self_check(&status);
 
-      if (status.severity < driver_result) {
-        status.severity = driver_result;
-      }
-
-      if (status.severity != SENSOR_SEVERITY_NORMAL) {
-        result = Sensor_RegistryWorst(result, status.severity);
-
-        if (abnormal_count < max_count) {
-          status_list[abnormal_count] = status;
-        }
-
-        abnormal_count++;
-      }
+      Sensor_RegistryCollectStatus(&result, status_list, max_count, &abnormal_count, &status, driver_result);
     }
   }
 
@@ -234,26 +235,29 @@ Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples, uint16_t max_
 
     if ((driver != NULL) && (driver->read != NULL) && (total_count < max_sample_count)) {
       uint16_t driver_count = 0U;
+      uint16_t sample_start = total_count;
+      uint16_t j;
+      uint8_t has_abnormal_sample = 0U;
       Sensor_Status_t status;
       Sensor_Severity_t driver_result;
 
       Sensor_RegistryInitStatus(driver, &status);
-      driver_result = driver->read(&samples[total_count], (uint16_t)(max_sample_count - total_count), &driver_count, &status);
 
-      if (status.severity < driver_result) {
-        status.severity = driver_result;
-      }
-
-      result = Sensor_RegistryWorst(result, status.severity);
+      driver_result = driver->read(&samples[total_count], (uint16_t)(max_sample_count - total_count), &driver_count);
       total_count = (uint16_t)(total_count + driver_count);
 
-      if (status.severity != SENSOR_SEVERITY_NORMAL) {
-        if ((status_list != NULL) && (status_count < max_status_count)) {
-          status_list[status_count] = status;
+      for (j = sample_start; j < total_count; j++) {
+        if (samples[j].status != 0U) {
+          has_abnormal_sample = 1U;
+          break;
         }
-
-        status_count++;
       }
+
+      if (((has_abnormal_sample != 0U) || (driver_result != SENSOR_SEVERITY_NORMAL)) && (driver->get_status != NULL)) {
+        (void)driver->get_status(&status);
+      }
+
+      Sensor_RegistryCollectStatus(&result, status_list, max_status_count, &status_count, &status, driver_result);
     }
   }
 
@@ -263,6 +267,54 @@ Sensor_Severity_t Sensor_RegistryReadAll(Sensor_Sample_t *samples, uint16_t max_
 
   if (out_status_count != NULL) {
     *out_status_count = status_count;
+  }
+
+  return result;
+}
+
+/**
+ * @brief 获取所有已注册传感器的当前异常状态。
+ *
+ * 本接口只调用驱动 get_status 回调，不访问硬件，不触发采样。
+ * 只有非 SENSOR_SEVERITY_NORMAL 的状态会写入 status_list。
+ *
+ * @param[out] status_list 调用方提供的异常状态数组。
+ * @param[in] max_count status_list 最多可容纳的异常状态数量。
+ * @param[out] out_count 可选输出，表示当前异常总数。
+ * @return 没有异常时返回 SENSOR_SEVERITY_NORMAL；
+ * 缓冲区无效时返回 SENSOR_SEVERITY_IMPORTANT；
+ * 其他情况返回所有异常中的最严重程度。
+ */
+Sensor_Severity_t Sensor_RegistryGetStatusAll(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
+{
+  Sensor_Severity_t result = SENSOR_SEVERITY_NORMAL;
+  uint16_t abnormal_count = 0U;
+  uint16_t i;
+
+  if (out_count != NULL) {
+    *out_count = 0U;
+  }
+
+  if ((status_list == NULL) || (max_count == 0U)) {
+    return SENSOR_SEVERITY_IMPORTANT;
+  }
+
+  for (i = 0U; i < SENSOR_REGISTRY_SLOT_COUNT; i++) {
+    const Sensor_Driver_t *driver = s_sensor_drivers[i];
+
+    if ((driver != NULL) && (driver->get_status != NULL)) {
+      Sensor_Status_t status;
+      Sensor_Severity_t driver_result;
+
+      Sensor_RegistryInitStatus(driver, &status);
+      driver_result = driver->get_status(&status);
+
+      Sensor_RegistryCollectStatus(&result, status_list, max_count, &abnormal_count, &status, driver_result);
+    }
+  }
+
+  if (out_count != NULL) {
+    *out_count = abnormal_count;
   }
 
   return result;

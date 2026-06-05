@@ -149,12 +149,7 @@ Sensor_Severity_t Sensor_RegistryInitAll(void)
   return SENSOR_SEVERITY_NORMAL;
 }
 
-Sensor_Severity_t Sensor_RegistrySelfCheckAll(void)
-{
-  return SENSOR_SEVERITY_NORMAL;
-}
-
-Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
+Sensor_Severity_t Sensor_RegistrySelfCheckAll(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
 {
   (void)status_list;
   (void)max_count;
