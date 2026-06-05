@@ -105,18 +105,18 @@ main()
       -> App_RegistryInitAll()
           -> Sensor_RegistryInitAll()
       -> App_RegistrySelfCheckAll()
-          -> Sensor_RegistrySelfCheckAbnormal()
+          -> Sensor_RegistrySelfCheckAll()
       -> create FreeRTOS tasks
   -> vTaskStartScheduler()
 ```
 
-运行阶段由 `system` 任务周期调用 `App_RegistryPoll()`，系统注册表会按 `check_period_ms` 触发各模块自检。`sensor` 模块的自检入口会继续下沉到 `Sensor_RegistrySelfCheckAbnormal()`，用于取得具体异常传感器的严重程度、统一错误码和可选驱动细节码。
+运行阶段由应用层采样调度入口统一调用 `Sensor_RegistryReadAll()`。传感器运行期异常由 `read()` 刷新驱动缓存状态，应用层再通过注册表汇总异常状态；`sensor` 模块的 `self_check` 只用于启动自检，不作为运行期周期硬件访问入口。
 
 ## 传感器驱动接口
 
 `Sensor_Driver` 目录目前提供统一接口骨架：
 
-- `sensor_data.h`：定义 `Sensor_Sample_t`、`Sensor_Value_t`、`Sensor_Type_t` 和 `Sensor_ValueType_t`
+- `sensor_data.h`：定义 `Sensor_Sample_t`、`Sensor_Value_t` 和 `Sensor_ValueType_t`
 - `sensor_driver.h`：定义 `Sensor_Driver_t`、`Sensor_Status_t` 和 `Sensor_Severity_t`
 - `sensor_registry.h/.c`：统一传感器初始化、自检、批量读取和驱动查询入口
 
@@ -126,7 +126,6 @@ main()
 static const Sensor_Driver_t g_gnss_driver =
 {
   .device_id = SENSOR_DEVICE_GNSS_1,
-  .sensor_type = SENSOR_TYPE_GNSS,
   .name = "gnss",
   .init = Gnss_Init,
   .self_check = Gnss_SelfCheck,

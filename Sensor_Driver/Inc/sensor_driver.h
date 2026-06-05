@@ -27,7 +27,6 @@ typedef enum {
 typedef struct
 {
   uint16_t device_id;              /**< 设备编号，由项目设备编号表统一分配。 */
-  Sensor_Type_t sensor_type;       /**< 传感器类型。 */
   Sensor_Severity_t severity;      /**< 异常严重程度。 */
   App_ErrorCode_t code;            /**< 全系统统一错误码，传感器驱动只填写 ERR_SENSOR_* 或 ERR_OK。 */
   uint32_t driver_error;           /**< 可选驱动细节码，例如 HAL 返回值、芯片状态或阶段码；没有细节时填 0。 */
@@ -55,10 +54,9 @@ typedef Sensor_Severity_t (*Sensor_SelfCheckFn)(Sensor_Status_t *status);
  * @param[out] samples 调用方提供的采样输出缓冲区。
  * @param[in] max_count samples 最多可容纳的采样记录数量。
  * @param[out] out_count 可选输出，表示实际写入的采样记录数量。
- * @param[out] status 可选状态输出，可以为 NULL。
  * @return 读取严重程度。
  */
-typedef Sensor_Severity_t (*Sensor_ReadFn)(Sensor_Sample_t *samples, uint16_t max_count, uint16_t *out_count, Sensor_Status_t *status);
+typedef Sensor_Severity_t (*Sensor_ReadFn)(Sensor_Sample_t *samples, uint16_t max_count, uint16_t *out_count);
 
 /**
  * @brief 传感器状态查询函数指针类型。
@@ -79,7 +77,6 @@ typedef Sensor_Severity_t (*Sensor_GetStatusFn)(Sensor_Status_t *status);
 typedef struct
 {
   uint16_t device_id;            /**< 设备编号，由项目设备编号表统一分配。 */
-  Sensor_Type_t sensor_type;     /**< 传感器类型。 */
   const char *name;              /**< 设备名称，用于日志、显示和调试。 */
   Sensor_InitFn init;            /**< 初始化回调。 */
   Sensor_SelfCheckFn self_check; /**< 自检回调。 */

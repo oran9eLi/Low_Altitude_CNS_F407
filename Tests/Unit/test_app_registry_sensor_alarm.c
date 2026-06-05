@@ -18,7 +18,6 @@ static uint8_t s_sensor_status_set;
 static const Sensor_Driver_t s_test_sensor_driver =
 {
   .device_id = 1U,
-  .sensor_type = SENSOR_TYPE_GNSS,
   .name = "GNSS-1",
   .init = 0,
   .self_check = 0,
@@ -166,12 +165,7 @@ Sensor_Severity_t Sensor_RegistryInitAll(void)
   return SENSOR_SEVERITY_NORMAL;
 }
 
-Sensor_Severity_t Sensor_RegistrySelfCheckAll(void)
-{
-  return SENSOR_SEVERITY_GENERAL;
-}
-
-Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
+Sensor_Severity_t Sensor_RegistrySelfCheckAll(Sensor_Status_t *status_list, uint16_t max_count, uint16_t *out_count)
 {
   if (out_count != 0)
   {
@@ -181,7 +175,6 @@ Sensor_Severity_t Sensor_RegistrySelfCheckAbnormal(Sensor_Status_t *status_list,
   if ((status_list != 0) && (max_count > 0U))
   {
     status_list[0].device_id = 1U;
-    status_list[0].sensor_type = SENSOR_TYPE_GNSS;
     status_list[0].severity = SENSOR_SEVERITY_GENERAL;
     status_list[0].code = ERR_SENSOR_NO_FIX;
     status_list[0].driver_error = 0x33U;
@@ -236,7 +229,6 @@ int main(void)
   failures += expect_true(s_sensor_alarm_msg.header.instance_id == 1U, "sensor id is the alarm instance id");
   failures += expect_true(s_sensor_alarm_msg.header.payload_type == APP_ALARM_PAYLOAD_SENSOR, "sensor payload type is used");
   failures += expect_true(s_sensor_alarm_msg.payload.sensor.sensor_id == 1U, "sensor id is in payload");
-  failures += expect_true(s_sensor_alarm_msg.payload.sensor.sensor_type == SENSOR_TYPE_GNSS, "sensor type is in payload");
   failures += expect_true(strcmp(s_sensor_alarm_msg.payload.sensor.name, "GNSS-1") == 0,
                           "sensor name is in payload");
   failures += expect_true(s_sensor_alarm_msg.payload.sensor.detail == 0x33U, "sensor driver detail is in payload");

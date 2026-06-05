@@ -40,7 +40,6 @@ typedef enum {
 typedef struct
 {
   uint16_t sensor_id;
-  uint16_t sensor_type;
   char name[APP_ALARM_NAME_LEN];
   uint32_t detail;
 } App_AlarmSensorPayload_t;

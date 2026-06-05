@@ -11,7 +11,8 @@
 /**
  * @brief 传感器或设备类型。
  *
- * 用于描述驱动句柄和采样数据所属的设备类别，便于上层显示、日志和协议上报。
+ * V1.0 运行期采样结构不再携带该字段。该枚举保留给后续设备信息表、
+ * 静态分类或兼容旧文档使用。
  */
 typedef enum {
   SENSOR_TYPE_UNKNOWN = 0, /**< 未分类或暂未明确的设备类型。 */
@@ -71,11 +72,10 @@ typedef union {
 typedef struct
 {
   uint16_t device_id;            /**< 设备编号，由项目设备编号表统一分配。 */
-  Sensor_Type_t sensor_type;     /**< 传感器类型，通常与驱动句柄中的类型一致。 */
   uint16_t channel;              /**< 通道号，用于区分同一设备输出的多个采样项。 */
   Sensor_ValueType_t value_type; /**< 采样值类型，说明 value 联合体中哪个字段有效。 */
   uint32_t timestamp_ms;         /**< 采样时间戳，单位 ms。 */
-  uint32_t status;               /**< 采样状态或数据质量标志，0 表示正常。 */
+  uint8_t status;                /**< 采样状态，0 表示正常，1 表示异常。 */
   char unit[SENSOR_UNIT_LEN];    /**< 单位字符串，例如 "V"、"degC"、"geo"、"-"。 */
   Sensor_Value_t value;          /**< 采样值。 */
 } Sensor_Sample_t;

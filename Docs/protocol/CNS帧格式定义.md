@@ -179,17 +179,16 @@ cnt(1B) + sample[0] + sample[1] + ...
 单个采样点：
 
 ```text
-sensor_id(2) + sensor_type(1) + channel(2) + value_type(1) + timestamp_ms(4) + status_flags(4) + value_len(1) + value(N)
+sensor_id(2) + channel(2) + value_type(1) + timestamp_ms(4) + status(1) + value_len(1) + value(N)
 ```
 
 | 字段 | 长度 | 说明 |
 |---|---:|---|
 | `sensor_id` | 2 | 与 `Sensor_Driver_t.device_id` 一致 |
-| `sensor_type` | 1 | `Sensor_Type_t` 的线上编码 |
 | `channel` | 2 | 与 `Sensor_Sample_t.channel` 一致 |
 | `value_type` | 1 | `Sensor_ValueType_t`：`0=NONE, 1=FLOAT, 2=INT32, 3=UINT32, 4=BOOL, 5=GEO` |
 | `timestamp_ms` | 4 | 采样时间戳 |
-| `status_flags` | 4 | 采样质量或数据状态标志；0 表示正常 |
+| `status` | 1 | `0=正常, 1=异常`；具体错误通过 `CNS_MSG_ALARM` 上报 |
 | `value_len` | 1 | value 字节数 |
 | `value` | N | 采样值，小端编码 |
 
@@ -205,6 +204,8 @@ value 编码：
 | `GEO` | 12 | `lat_e7:int32 + lon_e7:int32 + alt_mm:int32` |
 
 单帧 payload 不超过 128 字节。采样点过多时拆成多帧发送，`sequence` 正常递增。
+
+多传感器和多通道数据通过 `sensor_id + channel + value_type` 区分。协议层读取应用层维护的采样快照后组帧，不直接调用传感器驱动访问硬件。
 
 ### 5.3 ALARM (0x04)
 
@@ -246,7 +247,7 @@ detail 编码：
 | `payload_type` | detail 内容 |
 |---|---|
 | `NONE` | `detail_len=0` |
-| `SENSOR` | `sensor_id:uint16 + sensor_type:uint8 + driver_error:uint32 + name_len:uint8 + name:name_len` |
+| `SENSOR` | `sensor_id:uint16 + driver_error:uint32 + name_len:uint8 + name:name_len` |
 | `COMM` | `link_id:uint16 + timeout_ms:uint32 + detail:uint32` |
 | `STORAGE` | `target_id:uint16 + operation:uint32 + detail:uint32` |
 | `SYSTEM` | `hook_code:uint32 + task_id:uint32 + detail:uint32` |

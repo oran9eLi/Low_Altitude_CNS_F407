@@ -309,7 +309,7 @@ static App_CheckResult_t App_RegistrySensorSelfCheck(App_ErrorCode_t *code)
   uint16_t current_count = 0U;
   uint16_t i;
 
-  sensor_severity = Sensor_RegistrySelfCheckAbnormal(status_list, APP_REGISTRY_SENSOR_STATUS_MAX, &status_count);
+  sensor_severity = Sensor_RegistrySelfCheckAll(status_list, APP_REGISTRY_SENSOR_STATUS_MAX, &status_count);
 
   for (i = 0U; (i < status_count) && (i < APP_REGISTRY_SENSOR_STATUS_MAX); i++)
   {
@@ -637,7 +637,6 @@ static void App_RegistryPostSensorAlarm(const Sensor_Status_t *status, App_Error
 
   (void)memset(&payload, 0, sizeof(payload));
   payload.sensor.sensor_id = status->device_id;
-  payload.sensor.sensor_type = (uint16_t)status->sensor_type;
   payload.sensor.detail = status->driver_error;
   name = App_RegistryFindSensorName(status->device_id);
   (void)strncpy(payload.sensor.name, name, sizeof(payload.sensor.name) - 1U);
