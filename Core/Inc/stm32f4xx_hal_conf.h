@@ -17,6 +17,10 @@ extern "C" {
 #define HAL_SPI_MODULE_ENABLED
 #define HAL_TIM_MODULE_ENABLED
 #define HAL_UART_MODULE_ENABLED
+#define HAL_ADC_MODULE_ENABLED
+#define HAL_SD_MODULE_ENABLED
+#define HAL_EXTI_MODULE_ENABLED
+#define HAL_SRAM_MODULE_ENABLED
 
 #if !defined(HSE_VALUE)
 #define HSE_VALUE (8000000U)
@@ -103,6 +107,23 @@ extern "C" {
 
 #ifdef HAL_UART_MODULE_ENABLED
 #include "stm32f4xx_hal_uart.h"
+#endif
+
+#ifdef HAL_ADC_MODULE_ENABLED
+#include "stm32f4xx_hal_adc.h"
+#include "stm32f4xx_hal_adc_ex.h"
+#endif
+
+#ifdef HAL_SD_MODULE_ENABLED
+#include "stm32f4xx_hal_sd.h"
+#endif
+
+#ifdef HAL_SRAM_MODULE_ENABLED
+#include "stm32f4xx_hal_sram.h"
+#endif
+
+#ifdef HAL_EXTI_MODULE_ENABLED
+#include "stm32f4xx_hal_exti.h"
 #endif
 
 #ifdef USE_FULL_ASSERT

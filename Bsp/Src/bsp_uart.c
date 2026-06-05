@@ -1,4 +1,5 @@
 #include "bsp_uart.h"
+#include "bsp_config.h"
 
 /***************DEBUG***************/
 static UART_HandleTypeDef huart1;
